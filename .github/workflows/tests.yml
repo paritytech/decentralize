@@ -1,0 +1,37 @@
+name: Unit Tests
+
+# Runs on every PR and every push to main, with NO path filter: "Unit Tests" is
+# a required status check on main, so it must always report. A paths-ignore
+# would skip the check on docs-only PRs and leave the required check pending,
+# deadlocking the merge.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Least privilege: this workflow runs untrusted PR code, so it gets read-only
+# access and no secrets. Never raise these without a matching review.
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # The published `bin` points into dist/, so a broken emit is a broken
+      # package even when types and tests are green.
+      - run: npm run build
