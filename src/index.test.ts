@@ -17,7 +17,7 @@
 /**
  * Unit tests for the pure logic in index.ts. The three exported helpers are the
  * parts with real branching; the deploy itself is a passthrough to
- * bulletin-deploy and is covered by running it, not by mocks.
+ * bulletin-deploy, and the handoff to it lives in cli.test.ts.
  *
  * `resolveSpaRoot` mutates the directory it is given (it renames the entry), so
  * every case builds a throwaway tree under a fresh mkdtemp.
