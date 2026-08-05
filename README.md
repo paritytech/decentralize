@@ -146,5 +146,5 @@ npm run build
 
 ## Licence
 
-Apache-2.0. `bulletin-deploy` is a separate GPL-3.0-or-later program which this
-tool invokes as a subprocess; it is not linked into this codebase.
+GPL-3.0-or-later, matching [`bulletin-deploy`](https://www.npmjs.com/package/bulletin-deploy)
+and [`polkadot-app-deploy`](https://github.com/paritytech/polkadot-app-deploy).
