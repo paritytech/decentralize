@@ -38,7 +38,7 @@
         "prepublishOnly": "npm run build && npm test"
     },
     "dependencies": {
-        "bulletin-deploy": "0.14.1"
+        "bulletin-deploy": "0.14.2"
     },
     "devDependencies": {
         "@types/node": "^22.10.2",
