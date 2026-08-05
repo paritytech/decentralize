@@ -1,0 +1,48 @@
+{
+    "name": "@paritytech/decentralize",
+    "version": "0.1.0",
+    "description": "Stage a file or folder as a single-page-app archive and deploy it to the Polkadot Bulletin Chain under a .dot name",
+    "license": "Apache-2.0",
+    "type": "module",
+    "engines": {
+        "node": ">=22"
+    },
+    "bin": {
+        "decentralize": "./dist/cli.js"
+    },
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist",
+        "README.md",
+        "LICENSE"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/paritytech/decentralize.git"
+    },
+    "bugs": {
+        "url": "https://github.com/paritytech/decentralize/issues"
+    },
+    "homepage": "https://github.com/paritytech/decentralize#readme",
+    "scripts": {
+        "build": "tsc",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run",
+        "prepublishOnly": "npm run build && npm test"
+    },
+    "dependencies": {
+        "bulletin-deploy": "0.14.1"
+    },
+    "devDependencies": {
+        "@types/node": "^22.10.2",
+        "typescript": "^5.7.2",
+        "vitest": "^3.0.5"
+    }
+}
