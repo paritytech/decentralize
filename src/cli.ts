@@ -137,7 +137,7 @@ function printUsage(): void {
             "  --dot <name>      DotNS name, with or without `.dot` (required)\n" +
             "  --path <dir>      Explicit alternative to the bare positional source\n" +
             "  --entry <file>    Entry file to use as index.html (skips auto-detection)\n" +
-            "  --no-fallback     Skip writing 404.html + _redirects\n" +
+            "  --fallback        Also write 404.html + _redirects (off by default; see README)\n" +
             "  --keep-staging    Leave the staging directory on disk\n" +
             "  --dry-run         Stage and print the plan, deploy nothing\n" +
             "  --help            Show this help\n\n" +

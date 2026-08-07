@@ -209,7 +209,15 @@ describe("the handoff to bulletin-deploy", () => {
         const out = run([app(), "--dot", "myapp"]);
 
         // The child read this itself, so it cannot be satisfied by a path that
-        // was staged and then cleaned up before the spawn.
+        // was staged and then cleaned up before the spawn. No --fallback, so no
+        // 404.html/_redirects: that is the point of this change (see the
+        // parseArgs fallback-default tests in index.test.ts and bulletin-deploy#1233).
+        expect(out.record!.uploadRootFiles).toEqual(["index.html"]);
+    });
+
+    it("writes the fallback files too when --fallback is passed", () => {
+        const out = run([app(), "--dot", "myapp", "--fallback"]);
+
         expect(out.record!.uploadRootFiles).toEqual(["404.html", "_redirects", "index.html"]);
     });
 
