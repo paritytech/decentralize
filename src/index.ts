@@ -43,7 +43,12 @@
  * Keep routing in memory; do not promise users refresh-to-route or shareable
  * deep links. `404.html` / `_redirects` are read by neither the sandbox nor
  * polkadot-desktop — they are written only as harmless insurance for a plain
- * Kubo gateway, and `--no-fallback` skips them.
+ * Kubo gateway, so they are OFF by default and `--fallback` opts in. A
+ * byte-identical `404.html` copy of `index.html` is not free: it doubles the
+ * bytes bulletin-deploy has to chunk and upload for something neither of this
+ * tool's real deployment targets ever reads (see `writeFallbackFiles` below,
+ * and bulletin-deploy#1233 for how badly that cost compounds in the 1-2 MB
+ * chunking band).
  */
 
 import {
@@ -105,7 +110,8 @@ export interface Args {
     domain: string;
     /** Explicit entry file relative to `source` (skips auto-detection). */
     entry: string | null;
-    /** Write 404.html + _redirects alongside index.html. */
+    /** Write 404.html + _redirects alongside index.html. Off by default — see
+     *  `--fallback` in parseArgs and the module doc comment above. */
     fallback: boolean;
     /** Leave the staging directory on disk for inspection. */
     keepStaging: boolean;
@@ -128,7 +134,7 @@ export function parseArgs(argv: string[]): Args {
     let source: string | null = null;
     let domain: string | null = null;
     let entry: string | null = null;
-    let fallback = true;
+    let fallback = false;
     let keepStaging = false;
     let dryRun = false;
     const passthrough: string[] = [];
@@ -161,7 +167,17 @@ export function parseArgs(argv: string[]): Args {
             case "--entry":
                 entry = needsValue(arg, argv[++i]);
                 continue;
+            case "--fallback":
+                fallback = true;
+                continue;
             case "--no-fallback":
+                // No longer changes the default (it's already false), but this
+                // case MUST stay. Every unrecognised flag falls through to the
+                // passthrough branch below and is forwarded to bulletin-deploy
+                // verbatim; deleting this arm would turn `--no-fallback` into a
+                // silent passthrough flag and break any existing script/CI
+                // invocation that still passes it. Keep it as a recognised,
+                // explicit no-op.
                 fallback = false;
                 continue;
             case "--keep-staging":
@@ -399,7 +415,13 @@ export function excludedByReroot(stagingDir: string, uploadRoot: string): string
         .sort();
 }
 
-/** Cheap insurance for gateways that honour them. Never overwrites. */
+/**
+ * Opt-in insurance for plain Kubo gateways that honour these files — off by
+ * default, since neither the Polkadot sandbox nor polkadot-desktop reads them,
+ * and 404.html is a byte-identical copy of index.html that doubles the bytes
+ * bulletin-deploy has to chunk and upload for no benefit on those targets
+ * (see bulletin-deploy#1233). Never overwrites.
+ */
 export function writeFallbackFiles(uploadRoot: string): string[] {
     const actions: string[] = [];
     const notFound = join(uploadRoot, "404.html");

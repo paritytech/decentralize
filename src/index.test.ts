@@ -134,6 +134,39 @@ describe("parseArgs", () => {
         expect(() => parseArgs(["./dist", "--dot"])).toThrow(/--dot requires a value/);
         expect(() => parseArgs(["./dist", "--dot", "--publish"])).toThrow(/--dot requires a value/);
     });
+
+    it("defaults to no fallback files", () => {
+        // The byte-identical 404.html doubles chunk count on a plain deploy, and
+        // neither the sandbox nor polkadot-desktop reads it (see
+        // bulletin-deploy#1233 and the README).
+        const args = parseArgs(["./dist", "--dot", "x"]);
+        expect(args.fallback).toBe(false);
+    });
+
+    it("writes the fallback files when explicitly opted in via --fallback", () => {
+        const args = parseArgs(["./dist", "--dot", "x", "--fallback"]);
+        expect(args.fallback).toBe(true);
+        expect(args.passthrough).toEqual([]);
+    });
+
+    it("recognises --no-fallback as its own flag rather than forwarding it", () => {
+        // The regression this guards: an unrecognised flag is forwarded AND its
+        // lookahead swallows the next non-dash token (see the parseArgs doc
+        // comment), so a passthrough-treated --no-fallback would eat the source
+        // positional and fail with "a file or directory is required" instead of
+        // parsing normally.
+        const args = parseArgs(["./dist", "--dot", "x", "--no-fallback"]);
+        expect(args.fallback).toBe(false);
+        expect(args.passthrough).toEqual([]);
+        expect(() => parseArgs(["--no-fallback", "./dist", "--dot", "x"])).not.toThrow();
+    });
+
+    it("recognises --fallback the same way, without forwarding or swallowing", () => {
+        const args = parseArgs(["./dist", "--dot", "x", "--fallback"]);
+        expect(args.passthrough).toEqual([]);
+        expect(() => parseArgs(["--fallback", "./dist", "--dot", "x"])).not.toThrow();
+        expect(parseArgs(["--fallback", "./dist", "--dot", "x"]).source).toBe("./dist");
+    });
 });
 
 describe("resolveSpaRoot", () => {

@@ -38,7 +38,7 @@ decentralize ./dist --dot my-app -- --env summit --password hunter2
 | `--dot <name>` | DotNS name, with or without `.dot`. Required. |
 | `--path <dir>` | Explicit alternative to the bare positional source. |
 | `--entry <file>` | Entry file to use as `index.html`, skipping auto-detection. |
-| `--no-fallback` | Skip writing `404.html` + `_redirects`. |
+| `--fallback` | Also write `404.html` + `_redirects` (off by default — see below). |
 | `--keep-staging` | Leave the staging directory on disk to inspect. |
 | `--dry-run` | Stage and print the plan; deploy nothing. |
 
@@ -59,8 +59,8 @@ ambiguous.
    renamed; a recognisable entry (`main`/`app`/`home`/`default`.html) chosen from
    several; otherwise the shallowest nested `index.html` is hoisted to become the
    root. Ambiguity is an error naming the candidates, not a guess.
-4. **Writes `404.html` + `_redirects`** as harmless insurance for plain IPFS
-   gateways (see the caveat below).
+4. **Writes nothing else by default.** `404.html` + `_redirects` are only
+   written with `--fallback` (see below for why that's the default now).
 5. **Runs `bulletin-deploy`** against the staged directory with your `.dot` name.
 
 ## Why `index.html` at the root is the whole point
@@ -98,8 +98,22 @@ from hard-404ing, but the route always resets to home. **Keep routing in memory;
 do not promise users refresh-to-route or shareable deep links.**
 
 Consequently `404.html` and `_redirects` are read by neither the sandbox nor
-polkadot-desktop. They are written only for plain Kubo gateways, and
-`--no-fallback` skips them.
+polkadot-desktop — they only matter on a plain Kubo gateway. That makes them
+the wrong default: `404.html` is written as a byte-identical copy of
+`index.html`, which simply doubles the bytes bulletin-deploy has to chunk and
+upload for a file nothing in this tool's real deployment targets ever reads.
+Measured on a live deploy: a 1,708,272-byte single-file app produced 19
+on-chain chunks (nonces 37211–37228) because the duplicate `404.html` doubled
+the payload — and the duplicate blocks carry identical CIDs and still get
+uploaded twice. It compounds with
+[bulletin-deploy#1233](https://github.com/paritytech/bulletin-deploy/issues/1233):
+`packSection` fragments files in the 1–2 MB band into one chunk per 256 KB IPFS
+block (2.0 MB → 8 chunks, 2.2 MB → 2 chunks), so for a file in that band the
+duplicate is not merely +100% — it's +100% of an already-inflated chunk count.
+
+So fallback files are **off by default**. Pass `--fallback` to opt in if you
+actually serve from a plain Kubo gateway. `--no-fallback` is still accepted (as
+a no-op) so existing scripts and CI invocations keep working unchanged.
 
 ## Naming: exactly 0 or 2 trailing digits
 
