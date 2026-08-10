@@ -1,0 +1,71 @@
+name: E2E Chain Validation
+
+# On-demand + nightly ONLY — never pull_request, never push. This suite makes
+# a real deploy to Paseo Next v2 (a DotNS write, an IPFS pin, and a gateway
+# roundtrip against a public testnet), and testnet weather is outside this
+# repo's control. Gating merges on it would make "cannot merge" indistinguishable
+# from "testnet is down" — `Unit Tests` (.github/workflows/tests.yml) stays the
+# only required check on main; this workflow is purely an on-demand/nightly
+# button. See the design doc's "Trigger" section:
+# docs-internal/superpowers/specs/2026-08-10-e2e-chain-validation-design.md
+on:
+  workflow_dispatch: {}
+  schedule:
+    # 03:17 UTC — deliberately off-the-hour, so this doesn't stack onto
+    # GitHub's scheduler at the same instant as every other repo's midnight
+    # or top-of-hour cron.
+    - cron: "17 3 * * *"
+
+# The suite re-deploys over ONE fixed DotNS name every run, `decentralize-ci.dot`
+# (see the design doc's "Name strategy" and e2e/BOOTSTRAP.md item 1) — bounded
+# on-chain state, but it means two overlapping runs would race writing over the
+# same name mid-deploy. cancel-in-progress: false queues a second run instead
+# of cancelling the first mid-chain-write, which could leave the name in an
+# unknown state (partial upload, registration but no content, etc.).
+concurrency:
+  group: e2e-chain-validation
+  cancel-in-progress: false
+
+# No secrets, ever: the suite runs as bulletin-deploy's pool-fallback signer,
+# which needs neither a login session nor a --mnemonic (see e2e/BOOTSTRAP.md
+# items 4 and 6). Least privilege regardless — this workflow has no reason to
+# write anything.
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: E2E Chain Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The suite drives dist/cli.js directly, matching what users install —
+      # not the TypeScript source. See e2e/deploy.e2e.test.ts's module doc.
+      - run: npm run build
+      - name: Install Kubo (ipfs)
+        # Pinned to a known-good version rather than "latest", for the same
+        # reason this repo pins bulletin-deploy: reproducibility over
+        # whatever happens to be current on the day a run executes.
+        run: |
+          curl -sSL https://dist.ipfs.tech/kubo/v0.40.1/kubo_v0.40.1_linux-amd64.tar.gz -o kubo.tar.gz
+          tar -xzf kubo.tar.gz
+          sudo bash kubo/install.sh
+          ipfs version
+      # decentralize's own preflight only checks that `ipfs` resolves on
+      # PATH — the repo is bulletin-deploy's requirement, one layer down. A
+      # fresh runner has the binary but no repo, and the design's first spike
+      # died right here with "no IPFS repo found in <HOME>/.ipfs. please run:
+      # 'ipfs init'". See the design doc's "CI needs `ipfs init`, not just an
+      # `ipfs` binary" section and e2e/BOOTSTRAP.md item 2.
+      - run: ipfs init
+      # Preflight gate: fail loudly, before spending a real deploy, if any
+      # dependency this suite leans on (Kubo, the bulletin-deploy pin, the
+      # gateway, the manifest exports) is missing or has drifted. Read-only —
+      # never touches the chain. See e2e/BOOTSTRAP.md.
+      - run: e2e/bootstrap.sh
+      - run: npm run test:e2e

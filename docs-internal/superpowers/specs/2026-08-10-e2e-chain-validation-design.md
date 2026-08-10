@@ -230,6 +230,54 @@ is itself worth seeing.
   what users install).
 - No secrets. `permissions: contents: read`.
 
+## Session isolation (discovered after this design was written)
+
+Not known when the above was drafted; found while implementing the suite, and
+recorded here because it is exactly the kind of thing a future reader would
+otherwise "clean up" by mistake.
+
+bulletin-deploy's default behaviour, **when a login session exists on the
+invoking machine**, is: a local worker registers and deploys, then
+**transfers the name to the signed-in account** — zero mobile signatures
+required, `--no-transfer-to-signedin-user` is the opt-out. This design's whole
+overwrite-path story depends on `decentralize-ci.dot` staying owned by the
+shared pool-fallback worker (`0x35Cdb23fF7fc86E8DCcd577CA309bFEA9c978D20`)
+forever, so every subsequent run can overwrite it (see "Name strategy" above).
+
+If this suite ever ran on a machine with an active `bulletin-deploy login`
+session — a developer's laptop is the realistic case, since CI runners never
+have one — the deploy would silently and **permanently** move the name onto
+that human's personal account. That is worse than an ordinary test failure:
+it is not recoverable by re-running anything from CI, because CI's
+pool-fallback worker would no longer own the name to overwrite.
+
+**The fix:** the suite runs the deploy with the child process's `HOME` pointed
+at a fresh, throwaway temp directory. bulletin-deploy resolves its session
+store from `os.homedir()/.polkadot-apps`, and Node's `os.homedir()` resolves
+from `$HOME` — so a throwaway `HOME` guarantees no session is visible to the
+child, regardless of what is signed in on the host machine. This is exactly
+the state this design's spike itself was validated under: with a throwaway
+`HOME`, `whoami` reported "Not logged in" and the deploy took the
+pool-fallback path at 0 PAS.
+
+**The corollary that almost broke this a second way:** a throwaway `HOME`
+also hides the real IPFS repo (`~/.ipfs` lives under `HOME` too), and
+bulletin-deploy's merkleization step dies without one — this is the same "no
+IPFS repo found" failure that killed the first spike (see "CI needs `ipfs
+init`" above), except self-inflicted by the isolation fix instead of by a
+fresh runner. The remedy is the same shape: resolve the real `IPFS_PATH` from
+the ambient environment (respecting an already-set `$IPFS_PATH`, else
+`$HOME/.ipfs`) **before** overriding `HOME`, and pass it through to the child
+explicitly. Verified working end to end: a throwaway `HOME` plus an explicit
+`IPFS_PATH` pointed at the real, already-initialized repo reaches
+merkleization and the chain write normally.
+
+This is implemented once, in `e2e/deploy.e2e.test.ts`'s `runDeploy` — see its
+doc comment for the full explanation kept next to the code. `e2e/bootstrap.sh`
+carries the mirror-image guard for its own `--register` path (refusing to run
+while a session is signed in, rather than isolating it away), documented in
+`e2e/BOOTSTRAP.md` item 1.
+
 ## Open questions
 
 None. The spike settled signer, funding, label class, gateway semantics, and the
