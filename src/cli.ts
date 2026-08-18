@@ -134,9 +134,9 @@ function printUsage(): void {
             "Usage:\n" +
             "  decentralize <file-or-dir> --dot <name> [options] [-- <bulletin-deploy args>]\n\n" +
             "Options:\n" +
-            "  --dot <name>      DotNS name, with or without `.dot` (required). The TLD is\n" +
-            "                    chosen by the target environment (--env), not by this\n" +
-            "                    tool — e.g. paseo-next-v2 registers under `.paseo`.\n" +
+            "  --dot <name>      DotNS name (required). The TLD comes from the target\n" +
+            "                    environment (--env), not from this tool — e.g.\n" +
+            "                    paseo-next-v2 registers under `.paseo`.\n" +
             "  --path <dir>      Explicit alternative to the bare positional source\n" +
             "  --entry <file>    Entry file to use as index.html (skips auto-detection)\n" +
             "  --fallback        Also write 404.html + _redirects (off by default; see README)\n" +

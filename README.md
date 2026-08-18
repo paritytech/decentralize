@@ -35,7 +35,7 @@ decentralize ./dist --dot my-app -- --env summit --password hunter2
 
 | Option | Meaning |
 | --- | --- |
-| `--dot <name>` | DotNS name, with or without `.dot`. Required. |
+| `--dot <name>` | DotNS name. Required. The TLD comes from the target environment (`--env`) — e.g. paseo-next-v2 registers under `.paseo`. |
 | `--path <dir>` | Explicit alternative to the bare positional source. |
 | `--entry <file>` | Entry file to use as `index.html`, skipping auto-detection. |
 | `--fallback` | Also write `404.html` + `_redirects` (off by default — see below). |
