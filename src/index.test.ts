@@ -55,17 +55,29 @@ afterEach(() => {
 });
 
 describe("normaliseDomain", () => {
-    it("appends .dot to a bare label", () => {
-        expect(normaliseDomain("my-app")).toBe("my-app.dot");
+    // bulletin-deploy 0.15.0 made the TLD per-environment (paseo-next-v2 ->
+    // .paseo; preview -> .dot; most others carry none), so this tool no
+    // longer appends a suffix of its own — it forwards the bare label and
+    // lets bulletin-deploy apply whichever TLD the target --env uses.
+    it("strips a trailing .dot to the bare label", () => {
+        expect(normaliseDomain("my-app.dot")).toBe("my-app");
     });
 
-    it("leaves an already-suffixed name alone rather than doubling it", () => {
-        expect(normaliseDomain("my-app.dot")).toBe("my-app.dot");
+    it("leaves a bare label unchanged", () => {
+        expect(normaliseDomain("my-app")).toBe("my-app");
+    });
+
+    it("forwards a non-.dot suffix unchanged, since the caller typed it deliberately", () => {
+        expect(normaliseDomain("my-app.paseo")).toBe("my-app.paseo");
+    });
+
+    it("--dot my-app.dot and --dot my-app produce the same bare label", () => {
+        expect(normaliseDomain("my-app.dot")).toBe(normaliseDomain("my-app"));
     });
 
     it("tolerates surrounding whitespace and a trailing dot", () => {
-        expect(normaliseDomain("  my-app.dot.  ")).toBe("my-app.dot");
-        expect(normaliseDomain(" my-app ")).toBe("my-app.dot");
+        expect(normaliseDomain("  my-app.dot.  ")).toBe("my-app");
+        expect(normaliseDomain(" my-app ")).toBe("my-app");
     });
 
     it("rejects values that would normalise to nothing", () => {
@@ -78,7 +90,7 @@ describe("parseArgs", () => {
     it("takes the source positionally and the domain as a named parameter", () => {
         const args = parseArgs(["./dist", "--dot", "my-app"]);
         expect(args.source).toBe("./dist");
-        expect(args.domain).toBe("my-app.dot");
+        expect(args.domain).toBe("my-app");
         expect(args.passthrough).toEqual([]);
     });
 
@@ -86,7 +98,7 @@ describe("parseArgs", () => {
         expect(parseArgs(["--path", "./dist", "--domain", "x"]).source).toBe("./dist");
         expect(parseArgs(["--path=./dist", "--dot=x"])).toMatchObject({
             source: "./dist",
-            domain: "x.dot",
+            domain: "x",
         });
     });
 
@@ -238,23 +250,26 @@ describe("resolveSpaRoot", () => {
 
 describe("assertLabelIsPopRulesSafe (via normaliseDomain)", () => {
     it("accepts a label ending in a letter", () => {
-        expect(normaliseDomain("my-app")).toBe("my-app.dot");
+        expect(normaliseDomain("my-app")).toBe("my-app");
     });
 
     it("accepts exactly two trailing digits", () => {
-        expect(normaliseDomain("my-app01")).toBe("my-app01.dot");
+        expect(normaliseDomain("my-app01")).toBe("my-app01");
     });
 
     it("rejects one trailing digit, naming what it would silently become", () => {
-        // The live near-miss: spa-route-test3 → spa-route-test.dot (#1189).
-        expect(() => normaliseDomain("spa-route-test3")).toThrow(/spa-route-test\.dot/);
+        // The live near-miss: spa-route-test3 → spa-route-test (#1189). No
+        // TLD is asserted here: which suffix bulletin-deploy would have
+        // rewritten onto is environment-dependent since 0.15.0, but the
+        // silent-retarget hazard is the same regardless.
+        expect(() => normaliseDomain("spa-route-test3")).toThrow(/"spa-route-test"/);
         expect(() => normaliseDomain("spa-route-test3")).toThrow(/1 trailing digit;/);
     });
 
     it("rejects three or more trailing digits", () => {
         expect(() => normaliseDomain("my-app123")).toThrow(/3 trailing digits/);
         // >2 keeps the last two, mirroring sanitizeDomainLabel.
-        expect(() => normaliseDomain("my-app123")).toThrow(/my-app23\.dot/);
+        expect(() => normaliseDomain("my-app123")).toThrow(/"my-app23"/);
     });
 
     it("strips a dangling hyphen when suggesting alternatives", () => {

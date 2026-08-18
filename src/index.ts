@@ -106,7 +106,10 @@ export class UsageError extends Error {
 export interface Args {
     /** File or directory to deploy. */
     source: string;
-    /** DotNS label, normalised to end in `.dot`. */
+    /** DotNS label. A trailing `.dot` typed by the user is stripped to the
+     *  bare label; everything else is forwarded unchanged. bulletin-deploy
+     *  applies its own environment's TLD (e.g. `.paseo` for the default
+     *  paseo-next-v2 environment) — see `normaliseDomain`. */
     domain: string;
     /** Explicit entry file relative to `source` (skips auto-detection). */
     entry: string | null;
@@ -243,15 +246,40 @@ export function parseArgs(argv: string[]): Args {
     };
 }
 
-/** `my-app` and `my-app.dot` both normalise to `my-app.dot`. */
+/**
+ * `my-app` and `my-app.dot` both normalise to the bare label `my-app`.
+ *
+ * bulletin-deploy 0.15.0 made the TLD per-environment — `paseo-next-v2` (the
+ * default) registers under `.paseo`; only `preview` still uses `.dot`; most
+ * others carry no TLD at all in `assets/environments.json`. This tool has no
+ * business reading that table and applying it itself: which environment is
+ * even in play is decided by a passthrough `--env` flag this tool
+ * deliberately does not parse (see `parseArgs`'s doc comment), so duplicating
+ * bulletin-deploy's environment table here would just rot the moment a new
+ * network is added upstream. Forwarding the bare label instead makes this
+ * tool TLD-agnostic: bulletin-deploy resolves the correct suffix for whatever
+ * `--env` was actually passed. Verified live: a bare `decentralize-ci` against
+ * `paseo-next-v2` resolved to `decentralize-ci.paseo`, registered, and set the
+ * contenthash — exactly what bulletin-deploy's own error message instructs
+ * when handed a name with the wrong suffix.
+ *
+ * A trailing `.dot` is still stripped rather than forwarded literally, purely
+ * for backward compatibility: every existing `--dot my-app.dot` invocation and
+ * every example predating 0.15.0 spelled the suffix out, and stripping it
+ * keeps all of those working unchanged. Anything else the caller types (e.g.
+ * `my-app.paseo`, deliberately spelling out a different environment's suffix)
+ * is forwarded byte-for-byte — this function does not know or guess what a
+ * `.paseo` or any other suffix means, so it never invents or removes one on
+ * your behalf.
+ */
 export function normaliseDomain(input: string): string {
     const trimmed = input.trim().replace(/\.$/, "");
-    if (trimmed === "" || trimmed === ".dot") {
+    const label = trimmed.endsWith(".dot") ? trimmed.slice(0, -".dot".length) : trimmed;
+    if (label === "") {
         throw new UsageError(`invalid --dot value: "${input}"`);
     }
-    const domain = trimmed.endsWith(".dot") ? trimmed : `${trimmed}.dot`;
-    assertLabelIsPopRulesSafe(domain.slice(0, -".dot".length));
-    return domain;
+    assertLabelIsPopRulesSafe(label);
+    return label;
 }
 
 export function countTrailingDigits(label: string): number {
@@ -265,9 +293,11 @@ export function countTrailingDigits(label: string): number {
  * on-chain. bulletin-deploy's `sanitizeDomainLabel` therefore rewrites such
  * labels — and up to and including 0.13.x it did so on the registration path,
  * which SILENTLY RETARGETS the deploy at a different name (its issue #1189).
- * Observed live: `--dot spa-route-test3` became `spa-route-test.dot`, an
- * already-owned live name, and the deploy went on to offer to overwrite its
- * content.
+ * Observed live: `--dot spa-route-test3` became `spa-route-test`, an
+ * already-owned live name (registered under `.dot`, the only TLD that
+ * existed at the time), and the deploy went on to offer to overwrite its
+ * content. The rewrite-onto-a-different-name hazard is independent of which
+ * TLD is in play today.
  *
  * Newer bulletin-deploy refuses non-compliant labels outright, so erroring here
  * matches where upstream landed while also protecting anyone on an older
@@ -292,7 +322,7 @@ export function assertLabelIsPopRulesSafe(label: string): void {
     throw new UsageError(
         `--dot "${label}" has ${trailing} trailing digit${trailing === 1 ? "" : "s"}; DotNS ` +
             `(PopRules) accepts exactly 0 or 2. bulletin-deploy would rewrite it to ` +
-            `"${becomes}.dot" instead of failing — on 0.13.x that silently retargets the ` +
+            `"${becomes}" instead of failing — on 0.13.x that silently retargets the ` +
             `deploy at a DIFFERENT name, overwriting it if you own it (its issue #1189). ` +
             `Use a label ending in a letter, or in exactly two digits (e.g. "${stripped}" ` +
             `or "${stripped}01").`,
