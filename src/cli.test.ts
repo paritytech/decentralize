@@ -200,9 +200,22 @@ describe("the handoff to bulletin-deploy", () => {
         expect(out.record).not.toBeNull();
         const argv = out.record!.argv;
         // Positional order is the contract: root, then name, then passthrough.
-        expect(argv.slice(1)).toEqual(["myapp.dot", "--env", "paseo-next-v2"]);
+        expect(argv.slice(1)).toEqual(["myapp", "--env", "paseo-next-v2"]);
         expect(argv[0]).toContain("decentralize-");
-        expect(out.stdout).toContain("✔ Deployed myapp.dot");
+        expect(out.stdout).toContain("✔ Deployed myapp");
+    });
+
+    it("strips a trailing .dot but forwards a bare label unchanged", () => {
+        // bulletin-deploy 0.15.0 made the TLD per-environment (paseo-next-v2
+        // -> .paseo; preview -> .dot; most others carry none at all), so this
+        // tool no longer appends a suffix — it forwards the bare label and
+        // lets bulletin-deploy apply whichever TLD the target --env uses.
+        // Both spellings of the same label must reach the child identically.
+        const withSuffix = run([app(), "--dot", "my-app.dot", "--", "--env", "paseo-next-v2"]);
+        const bare = run([app(), "--dot", "my-app", "--", "--env", "paseo-next-v2"]);
+
+        expect(withSuffix.record!.argv.slice(1)).toEqual(["my-app", "--env", "paseo-next-v2"]);
+        expect(bare.record!.argv.slice(1)).toEqual(["my-app", "--env", "paseo-next-v2"]);
     });
 
     it("hands the child a directory that still holds the staged archive", () => {
@@ -301,6 +314,6 @@ describe("preflight, before anything is staged", () => {
         });
 
         expect(out.status).toBe(0);
-        expect(out.record!.argv.slice(1)).toEqual(["myapp.dot", "--js-merkle"]);
+        expect(out.record!.argv.slice(1)).toEqual(["myapp", "--js-merkle"]);
     });
 });

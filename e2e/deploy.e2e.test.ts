@@ -27,7 +27,7 @@
  * `exit 0` would sail straight through the bug we most need to catch.
  *
  * This suite makes ONE real deploy per case to Paseo Next v2, against the
- * fixed name `decentralize-ci.dot` (owned by bulletin-deploy's pool-fallback
+ * fixed name `decentralize-ci.paseo` (owned by bulletin-deploy's pool-fallback
  * worker — see e2e/BOOTSTRAP.md item 1 for the full rationale and its sharp
  * edges), and round-trips the on-chain contenthash back to the exact bytes
  * that were staged. Exit code alone is never the assertion.
@@ -150,14 +150,14 @@ interface DeployRun {
 
 /**
  * Run the BUILT CLI (`dist/cli.js`, matching what users install — not the
- * TypeScript source) against `decentralize-ci.dot`, with the child's session
+ * TypeScript source) against `decentralize-ci.paseo`, with the child's session
  * state isolated.
  *
  * WHY THE HOME OVERRIDE EXISTS — bulletin-deploy's default behaviour, when a
  * `bulletin-deploy login` session is signed in, is to register with a local
  * worker and then TRANSFER THE NAME to the signed-in account (zero mobile
  * signatures required — see e2e/BOOTSTRAP.md item 1's "mirror-image sharp
- * edge"). This suite depends on `decentralize-ci.dot` staying owned by the
+ * edge"). This suite depends on `decentralize-ci.paseo` staying owned by the
  * shared pool-fallback worker (`0x35Cdb23fF7fc86E8DCcd577CA309bFEA9c978D20`)
  * FOREVER, so every future run can overwrite it. If this suite ever ran on a
  * machine with an active session — a developer's laptop, most likely — the
@@ -353,7 +353,7 @@ async function deployAndVerify(caseLabel: string, ownFlags: string[]): Promise<V
 }
 
 /**
- * Both cases below deploy to the SAME name, `decentralize-ci.dot`, one after
+ * Both cases below deploy to the SAME name, `decentralize-ci.paseo`, one after
  * the other rather than to two separate names. That is a deliberate choice,
  * not an oversight:
  *
@@ -388,7 +388,7 @@ async function deployAndVerify(caseLabel: string, ownFlags: string[]): Promise<V
  *   builds `files` fresh each time; nothing merges in the previous manifest's
  *   file list. Each deploy's manifest reflects exactly what was staged for it.
  */
-describe("deploy.e2e — decentralize-ci.dot on Paseo Next v2", () => {
+describe("deploy.e2e — decentralize-ci.paseo on Paseo Next v2", () => {
     it(
         "deploys the default archive, and the deployed manifest matches the staged bytes exactly (no --fallback)",
         async () => {

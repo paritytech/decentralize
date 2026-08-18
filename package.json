@@ -1,7 +1,7 @@
 {
     "name": "@paritytech/decentralize",
     "version": "0.1.0",
-    "description": "Stage a file or folder as a single-page-app archive and deploy it to the Polkadot Bulletin Chain under a .dot name",
+    "description": "Stage a file or folder as a single-page-app archive and deploy it to the Polkadot Bulletin Chain under a DotNS name",
     "license": "GPL-3.0-or-later",
     "type": "module",
     "engines": {

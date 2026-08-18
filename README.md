@@ -2,7 +2,7 @@
 
 Take a folder (or a single HTML file), turn it into a correct single-page-app
 archive, and deploy it to the [Polkadot Bulletin Chain](https://github.com/paritytech/polkadot-bulletin-chain)
-under a `.dot` name.
+under a DotNS name.
 
 > [!WARNING]
 > Prototype / reference implementation. Not audited, actively experimental, and
@@ -47,6 +47,19 @@ verbatim (`--env`, `--password`, `--publish`, `--mnemonic`, `--js-merkle`, …).
 Use `--` to end this tool's own parsing when a forwarded flag would otherwise be
 ambiguous.
 
+**The TLD comes from the target environment, not from `--dot`.** `--dot` only
+carries the label — `my-app`, not `my-app.paseo`. This tool forwards that
+label to `bulletin-deploy`, which applies whichever suffix the environment you
+deploy to (`--env`, itself forwarded — see above) actually uses:
+`paseo-next-v2` (the default) registers under `.paseo`; `preview` still uses
+`.dot`; most other environments carry no fixed suffix at all. A trailing
+`.dot` typed on `--dot` is stripped for backward compatibility (every example
+before bulletin-deploy 0.15.0 spelled it out), but this tool does not append
+one — guessing the right suffix per environment would mean copying
+bulletin-deploy's environment table here, and that copy would rot the moment
+a new network is added upstream. Pass the bare label and let bulletin-deploy
+pick the suffix.
+
 ## What it actually does
 
 1. **Copies** your source into a temp staging directory. Your build output is
@@ -61,7 +74,8 @@ ambiguous.
    root. Ambiguity is an error naming the candidates, not a guess.
 4. **Writes nothing else by default.** `404.html` + `_redirects` are only
    written with `--fallback` (see below for why that's the default now).
-5. **Runs `bulletin-deploy`** against the staged directory with your `.dot` name.
+5. **Runs `bulletin-deploy`** against the staged directory with your DotNS
+   label — bare, so bulletin-deploy applies the target environment's own TLD.
 
 ## Why `index.html` at the root is the whole point
 
@@ -121,14 +135,17 @@ DotNS (PopRules) accepts a label with **exactly zero or two trailing digits**;
 anything else reverts on-chain. bulletin-deploy responds by *rewriting* such
 labels — and on 0.13.x it did so on the registration path, silently retargeting
 the deploy at a different name ([its issue #1189](https://www.npmjs.com/package/bulletin-deploy)).
-Observed live: `--dot my-app3` became `my-app.dot`, an already-owned live name,
-and the deploy went on to offer to overwrite its content.
+Observed live: `--dot my-app3` became `my-app.dot` (`.dot` was the only TLD
+that existed at the time), an already-owned live name, and the deploy went on
+to offer to overwrite its content. The hazard — silently landing on a
+different, already-owned name — is the same regardless of which TLD the
+target environment uses today.
 
 This tool refuses such labels up front and tells you what they would have become:
 
 ```
 ✖ --dot "my-app3" has 1 trailing digit; DotNS (PopRules) accepts exactly 0 or 2.
-  bulletin-deploy would rewrite it to "my-app.dot" instead of failing …
+  bulletin-deploy would rewrite it to "my-app" instead of failing …
 ```
 
 Use a label ending in a letter, or in exactly two digits (`my-app01`).

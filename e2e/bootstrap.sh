@@ -30,7 +30,7 @@
 #                if the IPFS repo is missing. Nothing else. Does NOT
 #                register a name and does NOT deploy.
 #   --register   Performs the ONE real on-chain deploy that (re)claims
-#                decentralize-ci.dot on Paseo Next v2. Prints exactly what
+#                decentralize-ci.paseo on Paseo Next v2. Prints exactly what
 #                it is about to do, then asks for confirmation unless --yes
 #                is also given. Refuses to run if any required check above
 #                it is failing.
@@ -73,7 +73,7 @@ Usage: e2e/bootstrap.sh [--fix] [--register [--yes]] [-h|--help]
   --fix        Run `ipfs init` if the IPFS repo is missing. The only
                remediation this script performs automatically.
   --register   Perform the one real deploy that (re)claims
-               decentralize-ci.dot on Paseo Next v2. Confirms interactively
+               decentralize-ci.paseo on Paseo Next v2. Confirms interactively
                unless --yes is also passed.
   --yes        Skip the --register confirmation prompt.
 
@@ -254,7 +254,7 @@ check_dotns_status() {
     # deploy path itself and can fail independently of the thing we're
     # trying to check. Fabricating a check here would be worse than
     # admitting we don't have one. See e2e/BOOTSTRAP.md.
-    record_result "decentralize-ci.dot on-chain contenthash" "UNKNOWN" "cannot check without deploying — no supported read-only query found (see e2e/BOOTSTRAP.md). Use --register if you believe it needs (re)claiming."
+    record_result "decentralize-ci.paseo on-chain contenthash" "UNKNOWN" "cannot check without deploying — no supported read-only query found (see e2e/BOOTSTRAP.md). Use --register if you believe it needs (re)claiming."
 }
 
 # --- table + summary -----------------------------------------------------
@@ -294,7 +294,7 @@ do_register() {
     # e2e/BOOTSTRAP.md item 1: bulletin-deploy's *default* behaviour when a
     # mobile session is signed in is to register with the local worker and
     # then transfer the name to that signed-in account. Running --register
-    # while signed in would silently move decentralize-ci.dot off the
+    # while signed in would silently move decentralize-ci.paseo off the
     # pool-fallback worker and onto a human's personal account, permanently
     # breaking the overwrite-path design (the CI worker would no longer own
     # it, and no `--register` re-run from CI could get it back). Refuse
@@ -304,24 +304,28 @@ do_register() {
     if ! printf '%s' "$whoami_out" | grep -qi "not logged in"; then
         echo "Refusing --register: bulletin-deploy reports an active signed-in session:" >&2
         echo "  ${whoami_out//$'\n'/$'\n  '}" >&2
-        echo "By default, registering while signed in hands ${DOT_LABEL}.dot to that" >&2
+        echo "By default, registering while signed in hands ${DOT_LABEL}.paseo to that" >&2
         echo "signed-in account instead of the pool-fallback worker — this would break" >&2
         echo "the overwrite-path design permanently (see e2e/BOOTSTRAP.md item 1)." >&2
         echo "Run 'node node_modules/bulletin-deploy/bin/bulletin-deploy logout' first, then re-run --register." >&2
         exit 1
     fi
 
-    echo "== --register: (re)claim ${DOT_LABEL}.dot on ${ENV_ID} =="
+    echo "== --register: (re)claim ${DOT_LABEL}.paseo on ${ENV_ID} =="
     echo "This will:"
     echo "  1. Stage a minimal placeholder index.html in a throwaway temp directory."
     echo "  2. Run a REAL on-chain deploy:"
-    echo "       node node_modules/bulletin-deploy/bin/bulletin-deploy <tmpdir> ${DOT_LABEL}.dot --env ${ENV_ID}"
-    echo "  3. Use the pool-fallback worker (no session, no --mnemonic, no secret) —"
-    echo "     confirmed above: no bulletin-deploy session is signed in."
-    echo "     Expected cost: 0 PAS — the worker holds ProofOfPersonhoodFull, and"
-    echo "     ${DOT_LABEL} classifies as a NoStatus label (free to any status)."
-    echo "     If bulletin-deploy reports a nonzero price, STOP: that means the"
-    echo "     worker's PoP status lapsed. See e2e/BOOTSTRAP.md before proceeding."
+    echo "       node node_modules/bulletin-deploy/bin/bulletin-deploy <tmpdir> ${DOT_LABEL} --env ${ENV_ID}"
+    echo "     (bare label — bulletin-deploy applies ${ENV_ID}'s own TLD, .paseo; see the"
+    echo "     main README's Naming section for why this script does not append one)."
+    echo "  3. Use the pool-fallback worker (no session, no --mnemonic, no secret)."
+    echo "     Expected cost: ~11 PAS (oracle price 10 PAS + margin) — the worker no"
+    echo "     longer holds ProofOfPersonhoodFull (see e2e/BOOTSTRAP.md item 4, updated"
+    echo "     2026-08-18), so registerDepositWei charges the NoStatus price. The worker"
+    echo "     is funded (~5005 PAS as of 2026-08-18) specifically to cover this — see"
+    echo "     e2e/BOOTSTRAP.md item 4. If bulletin-deploy reports a balance failure,"
+    echo "     the worker needs topping up again; see BOOTSTRAP.md item 4 for exactly"
+    echo "     which address that is (the auto-top-up \"Alice\" cannot rescue it)."
     echo
 
     if [ "$ASSUME_YES" -ne 1 ]; then
@@ -348,7 +352,11 @@ do_register() {
         echo "generated $(date -u +%Y-%m-%dT%H:%M:%SZ)</body></html>"
     } >"$REGISTER_TMPDIR/index.html"
 
-    (cd "$REPO_ROOT" && node node_modules/bulletin-deploy/bin/bulletin-deploy "$REGISTER_TMPDIR" "${DOT_LABEL}.dot" --env "${ENV_ID}")
+    # Bare label — bulletin-deploy applies ${ENV_ID}'s own TLD (.paseo). Do
+    # not append ".dot" here: bulletin-deploy 0.15.0 made the TLD
+    # per-environment, and appending the wrong one fails outright with
+    # 'Domain "…" ends in ".dot", but this environment uses ".paseo" names.'
+    (cd "$REPO_ROOT" && node node_modules/bulletin-deploy/bin/bulletin-deploy "$REGISTER_TMPDIR" "${DOT_LABEL}" --env "${ENV_ID}")
 }
 
 # --- main ------------------------------------------------------------------

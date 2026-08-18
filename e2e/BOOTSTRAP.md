@@ -17,12 +17,29 @@ here is audited or hardened for production use.
 ```sh
 e2e/bootstrap.sh            # check-only, read-only, never touches the chain
 e2e/bootstrap.sh --fix      # additionally runs `ipfs init` if the repo is missing
-e2e/bootstrap.sh --register # the one real deploy that (re)claims decentralize-ci.dot
+e2e/bootstrap.sh --register # the one real deploy that (re)claims decentralize-ci.paseo
 ```
 
-## 1. `decentralize-ci.dot`
+## 1. `decentralize-ci.paseo`
 
-**What it is:** a fixed DotNS label on Paseo Next v2, registered 2026-08-07.
+> **Update, 2026-08-18:** the label's TLD changed. bulletin-deploy 0.15.0 made
+> the TLD per-environment, and paseo-next-v2 (this suite's `ENV_ID`) registers
+> under `.paseo`, not `.dot` — the name below was re-registered as
+> `decentralize-ci.paseo` (see item 4's update for the full re-genesis story).
+> Everywhere below that still says `.dot` in a command example is preserved
+> as-written for history; the live, current name is `decentralize-ci.paseo`,
+> and `decentralize` itself now forwards the bare label `decentralize-ci` and
+> lets bulletin-deploy apply that suffix (see the main README's "Naming"
+> section) — do not hand it `decentralize-ci.dot` directly, that now fails
+> with `Domain "decentralize-ci.dot" ends in ".dot", but this environment
+> uses ".paseo" names.`
+
+**What it is:** a fixed DotNS label on Paseo Next v2, originally registered
+2026-08-07 as `decentralize-ci.dot`, then re-registered 2026-08-18 as
+`decentralize-ci.paseo` after the chain re-genesis described in item 4's
+update (a re-genesis resets on-chain state, so the original registration did
+not carry forward — this is the "How to recreate it if lost" path below,
+exercised for real).
 
 **Why it's needed:** the suite re-deploys over the same name every run rather
 than minting a fresh one per run. That keeps on-chain state bounded (one
@@ -35,8 +52,9 @@ built-in worker `5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV` — the
 pool-fallback signer bulletin-deploy uses when no session and no
 `--mnemonic` are supplied.
 
-**Why it classifies as free (NoStatus):** from `classifyLabelStatus` in the
-pinned bulletin-deploy:
+**Why it classifies as NoStatus (open to any account — see item 4's update
+for why "NoStatus" no longer also means "free"):** from `classifyLabelStatus`
+in the pinned bulletin-deploy:
 
 | Label shape | Required status |
 | --- | --- |
@@ -55,16 +73,18 @@ failure.
 
 **How to recreate it if lost:** simply run a deploy against it. Any deploy —
 the e2e suite's own run, `e2e/bootstrap.sh --register`, or a manual
-`bulletin-deploy <dir> decentralize-ci.dot` — re-registers/overwrites it. There
-is no separate "provisioning" step; deploying *is* the recovery mechanism.
+`bulletin-deploy <dir> decentralize-ci --env paseo-next-v2` (bare label — see
+the 2026-08-18 update above) — re-registers/overwrites it. There is no
+separate "provisioning" step; deploying *is* the recovery mechanism.
 
 **The sharp edge (accepted risk, not hidden):** ownership sits with
 bulletin-deploy's **shared default dev worker**, not an account this project
 controls. That worker is derived deterministically for *anyone* who runs
 bulletin-deploy with no session and no `--mnemonic` against Paseo Next v2 —
 it is not scoped to this repo or this CI. Concretely: anyone, anywhere,
-running plain `bulletin-deploy <dir> decentralize-ci.dot` with no session
-would be the *same* signer/owner and could silently overwrite our content.
+running plain `bulletin-deploy <dir> decentralize-ci --env paseo-next-v2` with
+no session would be the *same* signer/owner and could silently overwrite our
+content.
 There is no ownership check we can add on our side to prevent this — the
 worker's identity is bulletin-deploy's, not ours. This is a real, accepted
 risk given the suite's scope (one disposable testnet fixture, not a
@@ -86,15 +106,15 @@ worker and then **transfer the name to the signed-in account** with zero
 mobile signatures (`--no-transfer-to-signedin-user` is the opt-out — see
 `bulletin-deploy --help`). A developer who is signed in on their own machine
 and runs `e2e/bootstrap.sh --register` — or any bare `bulletin-deploy <dir>
-decentralize-ci.dot` — without realizing it would silently move the name off
-the pool-fallback worker and onto their personal account. That's worse than
-the stranger case above: it's not recoverable by re-running `--register`
-from CI, because CI's pool worker no longer owns the name to overwrite.
-`e2e/bootstrap.sh --register` checks `bulletin-deploy whoami` first and
-refuses to run while a session is signed in, naming `bulletin-deploy logout`
-as the remedy — but this check only covers this script's own `--register`
-path, not a developer running bulletin-deploy directly by hand. Log out
-before touching `decentralize-ci.dot` directly.
+decentralize-ci --env paseo-next-v2` — without realizing it would silently
+move the name off the pool-fallback worker and onto their personal account.
+That's worse than the stranger case above: it's not recoverable by re-running
+`--register` from CI, because CI's pool worker no longer owns the name to
+overwrite. `e2e/bootstrap.sh --register` checks `bulletin-deploy whoami` first
+and refuses to run while a session is signed in, naming `bulletin-deploy
+logout` as the remedy — but this check only covers this script's own
+`--register` path, not a developer running bulletin-deploy directly by hand.
+Log out before touching `decentralize-ci.paseo` directly.
 
 ## 2. Kubo (`ipfs` binary + initialized repo)
 
@@ -193,8 +213,47 @@ reporting section.
 
 ## 4. The worker's `ProofOfPersonhoodFull` status
 
-**What it is:** the pool-fallback signer (`5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV`)
-currently carries `ProofOfPersonhoodFull`.
+> **Update, 2026-08-18 — this predicted failure mode happened.** Paseo Next
+> v2 was re-genesised, and the pool-fallback worker
+> (`5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV`) came back with **no PoP
+> status at all**. `bulletin-deploy`'s preflight now reports `Your PoP:
+> NoStatus` for it — exactly the "single most likely way the design silently
+> stops working" scenario called out below, before it had actually happened.
+> The section below is left as originally written (it is still an accurate
+> description of *why* the suite used to cost nothing); read it as history,
+> then read this update for the current state:
+>
+> - **Deploys are no longer free.** A live registration against
+>   `decentralize-ci.paseo` reported `Oracle price: 10 PAS / Paying: 11 PAS`
+>   — `registerDepositWei` now takes the `NoStatus` branch (`startingPriceWei`)
+>   exactly as predicted. Separately, bulletin-deploy's preflight also prints
+>   a balance-floor figure (observed: **211.1 PAS**) that the signer must hold
+>   to proceed — that figure is a *minimum balance requirement*, not the
+>   price of this deploy; don't confuse the two when reading its output.
+> - **The worker was funded** to cover this: topped up via the public faucet
+>   (<https://faucet.polkadot.io/?parachain=1500>) to **~5005 PAS**, at
+>   `5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV` — the same address as
+>   above. **That is the address to top up** if this suite ever starts
+>   failing on a balance error again.
+> - **The subtle trap: bulletin-deploy's own auto-top-up cannot rescue this
+>   worker.** bulletin-deploy has a dev-convenience path that auto-tops-up a
+>   low-balance signer from "Alice". That "Alice" is **the root account of
+>   the dev mnemonic** (`//` with no derivation path) — and the pool-fallback
+>   worker *is* that same root account, not `//Alice` (the well-known
+>   `5GrwvaEF…` test account derived from it). The auto-top-up code compares
+>   the source and recipient addresses and **skips the transfer whenever they
+>   are equal** — so when the worker itself is the signer, "Alice" funding
+>   the worker is a no-op by construction: the source and destination are the
+>   same account. Funding the derived `//Alice` (`5GrwvaEF…`) does **nothing**
+>   for this worker — do not waste a faucet request on it. Fund
+>   `5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV` directly.
+> - **Current registration:** `decentralize-ci.paseo` is registered and owned
+>   by `0x35Cdb23fF7fc86E8DCcd577CA309bFEA9c978D20` (the same worker, EVM-mapped
+>   — matches item 1's "Current owner").
+>
+> **What it was (history, before the re-genesis):** the pool-fallback signer
+> (`5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV`) carried
+> `ProofOfPersonhoodFull`.
 
 **Why this is the whole reason the suite costs nothing:** the price rule
 lives in the pinned bulletin-deploy and keys on the **signer's** status, not
@@ -230,7 +289,17 @@ If nightly runs start failing on a price/balance error where they previously
 didn't, check this first, before assuming a `decentralize` or
 `bulletin-deploy` regression.
 
-## 5. Pinned `bulletin-deploy@0.14.2`
+## 5. Pinned `bulletin-deploy@0.15.0`
+
+> **Update, 2026-08-18:** bumped from `0.14.2` to `0.15.0`
+> (`deps/bulletin-deploy-0.15.0`). The section below still says `0.14.2` in
+> places where it is describing that specific version's behaviour verbatim
+> ("verified by hand against 0.14.2" etc.) — left as-written, since it is
+> accurate history, not updated to imply it was re-verified against 0.15.0
+> line-by-line. The one thing this bump changed that matters everywhere in
+> this document: `assets/environments.json` gained a per-environment `tld`
+> field, and `paseo-next-v2` (this suite's `ENV_ID`) now uses `.paseo` instead
+> of `.dot` — see item 1's update and the main README's "Naming" section.
 
 **What it is:** `decentralize`'s own pinned dependency (`package.json` →
 `dependencies.bulletin-deploy`), and the two public exports the e2e suite
@@ -270,8 +339,11 @@ a mismatch by the check above):
    import paths with compatible signatures — the check above catches this
    directly.
 3. The price rule (`userStatus === NoStatus ? startingPriceWei : 0n`) is
-   still keyed the same way — a change here could reintroduce a cost where
-   today there is none.
+   still keyed the same way. (This branch is no longer hypothetical: as of
+   the 2026-08-18 update in item 4, the worker IS `NoStatus` and every run
+   now pays `startingPriceWei` — observed as `Oracle price: 10 PAS / Paying:
+   11 PAS`. Re-verify this rule's shape on the next bump precisely because a
+   change here changes what the suite pays, not whether it pays at all.)
 4. The CAR-vs-manifest relationship in the design doc ("The on-chain
    contenthash is the CAR, not the UnixFS directory") still holds — this is
    what the whole assertion chain in the design depends on.
@@ -292,12 +364,19 @@ confirming whether the free-deploy premise still holds at all — a secret
 papering over a broken premise just hides the regression instead of
 surfacing it.
 
+> **Update, 2026-08-18:** the trigger above fired — the worker's PoP status
+> lapsed (item 4) and the suite now pays `~11 PAS` per run. The rule in this
+> section still holds regardless: the fix was to **fund the worker directly**
+> (item 4's faucet top-up to ~5005 PAS), not to add a `MNEMONIC` secret. "No
+> secrets" was never a claim that deploys are free forever — it's a claim
+> that this suite doesn't authenticate as anyone. It still doesn't.
+
 ## Known unknowns
 
 Stated honestly rather than assumed away:
 
 - **Whether DotNS registrations expire.** Not established. If they do, the
-  window before `decentralize-ci.dot` needs a fresh registration (as opposed
+  window before `decentralize-ci.paseo` needs a fresh registration (as opposed
   to an overwrite of an existing one) is unknown. Both paths are handled by
   bulletin-deploy either way (see item 1's "how to recreate"), so this
   doesn't block the suite — it's flagged so nobody mistakes a
@@ -318,5 +397,11 @@ Stated honestly rather than assumed away:
   bulletin-deploy ever exposes a genuinely lightweight read-only query for
   this, revisit.
 - **Whether the worker's `ProofOfPersonhoodFull` status can lapse, and on
-  what schedule.** Not established — see item 4. Worth monitoring, not
-  currently monitorable from outside a full deploy attempt.
+  what schedule.** Partially resolved, 2026-08-18: it can, and did — see item
+  4's update. What's still unknown is the *schedule*: this instance was
+  triggered by a chain re-genesis, not a natural expiry, so whether
+  `ProofOfPersonhoodFull` also lapses on its own over time (independent of a
+  re-genesis event) remains unestablished. Still not monitorable from outside
+  a full deploy attempt (or a preflight-only run — see item 4's `Your PoP:
+  NoStatus` observation, which came from bulletin-deploy's own preflight
+  output, not a purpose-built check on our side).
