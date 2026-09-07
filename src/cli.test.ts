@@ -276,7 +276,7 @@ describe("the handoff to bulletin-deploy", () => {
 });
 
 describe("preflight, before anything is staged", () => {
-    it("resolves the pinned dependency when no override is set", () => {
+    it("resolves the installed dependency when no override is set", () => {
         // No BULLETIN_DEPLOY_BIN: this is the path a real user takes. Stop at
         // --dry-run so the real binary is never invoked.
         const out = run([app(), "--dot", "myapp", "--dry-run"], { deployBin: null });
@@ -285,7 +285,13 @@ describe("preflight, before anything is staged", () => {
         const version = JSON.parse(
             readFileSync(join(repoRoot, "node_modules", "bulletin-deploy", "package.json"), "utf8"),
         ) as { version: string };
-        expect(out.stdout).toContain(`Using bulletin-deploy@${version.version} (pinned dependency)`);
+        // "(installed dependency)", not "(pinned dependency)": this describes
+        // the RESOLUTION PATH (node_modules, not BULLETIN_DEPLOY_BIN/PATH),
+        // not the pin status — in latest-channel mode (see
+        // .github/workflows/e2e.yml) the installed version can legitimately
+        // be newer than what package.json pins, and the label must not lie
+        // about that.
+        expect(out.stdout).toContain(`Using bulletin-deploy@${version.version} (installed dependency)`);
         expect(out.stdout).toContain(join("node_modules", "bulletin-deploy"));
     });
 

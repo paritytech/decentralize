@@ -111,7 +111,7 @@ function resolveBulletinDeploy(): Spawnable {
         return {
             command: process.execPath,
             prefixArgs: [entry],
-            description: `bulletin-deploy@${manifest.version ?? "?"} (pinned dependency)`,
+            description: `bulletin-deploy@${manifest.version ?? "?"} (installed dependency)`,
         };
     } catch {
         // Fall through to a clear install message rather than silently using a
