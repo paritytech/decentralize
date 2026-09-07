@@ -9,7 +9,23 @@ name: E2E Chain Validation
 # button. See the design doc's "Trigger" section:
 # docs-internal/superpowers/specs/2026-08-10-e2e-chain-validation-design.md
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: >-
+          bulletin-deploy channel. 'latest' (the nightly default) installs
+          bulletin-deploy@latest on top of the package.json pin, to catch
+          upstream ABI drift the night it lands (see BULLETIN_DEPLOY_CHANNEL
+          below). Dispatch 'pinned' to run against exactly what package.json
+          pins instead — comparing the two tells an upstream bulletin-deploy
+          regression (only 'latest' fails) apart from chain drift (both fail)
+          or our own staleness (only 'pinned' fails). See e2e/BOOTSTRAP.md
+          item 5.
+        type: choice
+        options:
+          - latest
+          - pinned
+        default: latest
   schedule:
     # 03:17 UTC — deliberately off-the-hour, so this doesn't stack onto
     # GitHub's scheduler at the same instant as every other repo's midnight
@@ -37,6 +53,27 @@ jobs:
   e2e:
     name: E2E Chain Validation
     runs-on: ubuntu-latest
+    # package.json keeps an EXACT bulletin-deploy pin so end users get a
+    # known-good, reproducible version — that pin is never changed here.
+    # This job instead tracks the LATEST published bulletin-deploy on top of
+    # it (see the install step below), so upstream ABI drift is caught the
+    # night it lands rather than whenever someone next gets around to
+    # bumping the pin (this is exactly how decentralize missed the
+    # paseo-next-v2 POP_RULES pricing-ABI change every night since
+    # 2026-09-02 — see e2e/BOOTSTRAP.md item 5). A red run under this job
+    # therefore has THREE possible causes, not one: an upstream
+    # bulletin-deploy regression, chain drift (the testnet's own contracts
+    # changed), or this repo's own staleness. The version banner every vitest
+    # run prints (e2e/bulletin-version.ts) plus the channel input above are
+    # what separate them — a 'latest'-only failure is an upstream regression,
+    # a 'pinned'-only failure is our staleness, and both failing together is
+    # chain drift.
+    #
+    # inputs.channel only exists on a workflow_dispatch trigger; the schedule
+    # trigger has no inputs at all, and scheduled (nightly) runs must always
+    # default to 'latest' — the whole point of this job.
+    env:
+      BULLETIN_DEPLOY_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'latest' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -44,6 +81,32 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: "Install latest bulletin-deploy (channel: latest only)"
+        if: env.BULLETIN_DEPLOY_CHANNEL == 'latest'
+        # --no-save is deliberate: this must never touch package.json or
+        # package-lock.json (those stay pinned at the release this repo has
+        # verified — see e2e/BOOTSTRAP.md item 5's re-verification checklist).
+        # It only swaps what's on disk in node_modules for THIS job.
+        run: npm install --no-save bulletin-deploy@latest
+      - name: Report resolved bulletin-deploy version
+        # Never trust the install step silently: if it no-ops (latest already
+        # equals the pin, or a registry hiccup left the old copy in place),
+        # this must still show the TRUE installed version, read straight off
+        # disk. This runs on EVERY channel (not just 'latest') so a 'pinned'
+        # dispatch also gets its version recorded, for the same
+        # regression/drift/staleness comparison described above. Surfaced
+        # into the step summary too, so a nightly reader sees it without
+        # opening logs.
+        run: |
+          INSTALLED=$(node -e "process.stdout.write(require('./node_modules/bulletin-deploy/package.json').version)")
+          PINNED=$(node -e "process.stdout.write(require('./package.json').dependencies['bulletin-deploy'])")
+          echo "Resolved bulletin-deploy: ${INSTALLED} (channel: ${BULLETIN_DEPLOY_CHANNEL}; package.json pins ${PINNED})"
+          {
+            echo "### bulletin-deploy version"
+            echo "- installed: \`${INSTALLED}\`"
+            echo "- channel: \`${BULLETIN_DEPLOY_CHANNEL}\`"
+            echo "- package.json pin: \`${PINNED}\`"
+          } >>"$GITHUB_STEP_SUMMARY"
       # The suite drives dist/cli.js directly, matching what users install —
       # not the TypeScript source. See e2e/deploy.e2e.test.ts's module doc.
       - run: npm run build
