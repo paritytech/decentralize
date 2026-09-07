@@ -289,7 +289,7 @@ If nightly runs start failing on a price/balance error where they previously
 didn't, check this first, before assuming a `decentralize` or
 `bulletin-deploy` regression.
 
-## 5. Pinned `bulletin-deploy@0.15.0`
+## 5. Pinned `bulletin-deploy@0.17.0`
 
 > **Update, 2026-08-18:** bumped from `0.14.2` to `0.15.0`
 > (`deps/bulletin-deploy-0.15.0`). The section below still says `0.14.2` in
@@ -300,6 +300,50 @@ didn't, check this first, before assuming a `decentralize` or
 > this document: `assets/environments.json` gained a per-environment `tld`
 > field, and `paseo-next-v2` (this suite's `ENV_ID`) now uses `.paseo` instead
 > of `.dot` — see item 1's update and the main README's "Naming" section.
+
+> **Update, 2026-09-07:** bumped from `0.15.0` to `0.17.0`
+> (`deps/bulletin-deploy-0.17.0`). Motivation: the nightly e2e suite had been
+> red every night since 2026-09-02, always with `Contract execution would
+> revert during startingPrice on POP_RULES` on paseo-next-v2 — the DotNS
+> contracts there were upgraded (ABI drift, `PopRules.startingPrice()`
+> removed, pricing moved to a cost-model registry) and bulletin-deploy 0.16.1
+> shipped the fix (protocol-version detection + per-version adapters). The
+> section below still says `0.14.2` in places describing that specific
+> version's behaviour verbatim — left as-written as accurate history, not
+> updated to imply a line-by-line re-verification against every version in
+> between. See the "What to re-verify on any version bump" checklist below;
+> it was worked through again for this bump.
+>
+> **This bump also introduces a `latest` channel, separate from the pin.**
+> `package.json` keeps the exact `0.17.0` pin — end users still get a
+> known-good, reproducible version. But the nightly/on-demand workflow
+> (`.github/workflows/e2e.yml`) additionally installs
+> `bulletin-deploy@latest` on top of that pin before running, so upstream
+> ABI drift like the one above is caught the night it lands rather than
+> whenever someone next gets around to bumping the pin here. A new env var,
+> `BULLETIN_DEPLOY_CHANNEL` (`latest` or unset/`pinned`), tells both
+> `e2e/bootstrap.sh` and the vitest version banner (`e2e/bulletin-version.ts`)
+> which mode a run is in:
+>
+> - **Nightly (scheduled) runs default to `latest`.** `check_bulletin_pin` in
+>   `e2e/bootstrap.sh` treats installed-differs-from-declared as an expected,
+>   **PASS**ing condition in this mode (worded as "running latest X, package.json
+>   pins Y — in sync" or "— bump candidate"), not the WARN it would otherwise
+>   be — a nightly that installs a newer bulletin-deploy on purpose should not
+>   look like a misconfigured machine.
+> - **A human can dispatch a `pinned` run** (`workflow_dispatch` input
+>   `channel: pinned`) to discriminate an **upstream regression** (only
+>   `latest` fails) from **chain drift** (both `latest` and `pinned` fail —
+>   the deployed contracts changed under both) or **our own staleness** (only
+>   `pinned` fails, because `latest` has already adapted upstream). In
+>   `pinned` mode, `check_bulletin_pin`'s behaviour is completely unchanged
+>   from before this bump: installed-differs-from-declared is still the
+>   original **WARN**, with its full re-verification checklist.
+> - Every vitest run — unit and e2e alike — prints a one-line banner at
+>   start-up naming the installed version, the channel, and the package.json
+>   pin (e.g. `▸ bulletin-deploy@0.17.0 (channel: latest; package.json pins
+>   0.17.0)`), so a reader never has to dig through an `npm install` log to
+>   know which bulletin-deploy a given run actually exercised.
 
 **What it is:** `decentralize`'s own pinned dependency (`package.json` →
 `dependencies.bulletin-deploy`), and the two public exports the e2e suite
