@@ -19,5 +19,11 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
     test: {
         include: ["src/**/*.test.ts"],
+        // Prints which bulletin-deploy is installed, its channel, and what
+        // package.json pins — before ANY test runs, in this suite too (not
+        // only e2e/): a stale `node_modules/bulletin-deploy` after a pin
+        // bump is worth flagging here as well. See e2e/bulletin-version.ts
+        // for why this is safe to do in a suite that must stay hermetic.
+        globalSetup: ["./e2e/bulletin-version.ts"],
     },
 });

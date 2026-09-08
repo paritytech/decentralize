@@ -39,6 +39,12 @@
 #
 # Exit codes: 0 = all required checks passed (or --register succeeded).
 #             1 = a required check failed, or --register was aborted/failed.
+#
+# BULLETIN_DEPLOY_CHANNEL=latest (unset/anything else = pinned) tells
+# check_bulletin_pin below that node_modules/bulletin-deploy is EXPECTED to
+# differ from the package.json pin — set by .github/workflows/e2e.yml's
+# nightly job, which installs bulletin-deploy@latest on top of the pin to
+# catch upstream ABI drift the night it lands. See e2e/BOOTSTRAP.md item 5.
 
 set -euo pipefail
 
@@ -183,6 +189,29 @@ check_bulletin_pin() {
     local installed declared_stripped
     installed=$(node -e "process.stdout.write(require(process.argv[1]).version)" "$REPO_ROOT/node_modules/bulletin-deploy/package.json" 2>/dev/null || echo "unknown")
     declared_stripped=$(printf '%s' "$declared" | sed 's/^[\^~]//')
+
+    # BULLETIN_DEPLOY_CHANNEL=latest (see .github/workflows/e2e.yml) means
+    # this job DELIBERATELY installed bulletin-deploy@latest on top of the
+    # pin, so upstream ABI drift is caught the night it lands while
+    # package.json itself stays pinned for end users — a mismatch here is
+    # therefore expected, working-as-designed behaviour, not a sign of a
+    # stale machine. Record PASS either way (whether latest happens to equal
+    # the pin, or genuinely differs from it — a bump candidate worth
+    # promoting to the pin), so a nightly run never has to explain away its
+    # own intended drift. This branch takes over completely in latest mode:
+    # unlike every other case below, it does not fall through to the WARN.
+    if [ "${BULLETIN_DEPLOY_CHANNEL:-}" = "latest" ]; then
+        if [ "$declared_stripped" = "$installed" ]; then
+            record_result "bulletin-deploy pin" "PASS" "running latest ${installed}, package.json pins ${declared} — in sync"
+        else
+            record_result "bulletin-deploy pin" "PASS" "running latest ${installed}, package.json pins ${declared} — bump candidate"
+        fi
+        return
+    fi
+
+    # Channel unset/pinned (today's exact behaviour, unchanged by this bump):
+    # a version mismatch here really does mean "someone forgot npm install",
+    # or a deliberate pin bump that still needs re-verifying by hand.
     if [ "$declared_stripped" = "$installed" ]; then
         record_result "bulletin-deploy pin" "PASS" "installed ${installed} matches package.json (${declared})"
     else
@@ -258,6 +287,17 @@ check_dotns_status() {
 }
 
 # --- table + summary -----------------------------------------------------
+
+# Mirrors the vitest globalSetup banner (e2e/bulletin-version.ts) so the same
+# "which bulletin-deploy actually ran" question is answered at a glance
+# whether this run started from the shell or from a test file — read
+# straight off node_modules rather than the pin, so it's the version this
+# ACTUAL machine has, not what package.json wishes it had.
+print_header() {
+    local installed
+    installed=$(node -e "process.stdout.write(require(process.argv[1]).version)" "$REPO_ROOT/node_modules/bulletin-deploy/package.json" 2>/dev/null || echo "unknown")
+    echo "▸ bulletin-deploy@${installed} (channel: ${BULLETIN_DEPLOY_CHANNEL:-pinned})"
+}
 
 print_table() {
     echo
@@ -363,6 +403,8 @@ do_register() {
 
 main() {
     parse_args "$@"
+
+    print_header
 
     check_node
     check_ipfs_binary

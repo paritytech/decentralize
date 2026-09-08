@@ -51,8 +51,9 @@ ambiguous.
 carries the label — `my-app`, not `my-app.paseo`. This tool forwards that
 label to `bulletin-deploy`, which applies whichever suffix the environment you
 deploy to (`--env`, itself forwarded — see above) actually uses:
-`paseo-next-v2` (the default) registers under `.paseo`; `preview` still uses
-`.dot`; most other environments carry no fixed suffix at all. A trailing
+`paseo-next-v2` (the default) registers under `.paseo`; `preview` uses
+`.testnet` (re-rooted from `.dot` in bulletin-deploy 0.16.0, PR #1324); most
+other environments carry no fixed suffix at all. A trailing
 `.dot` typed on `--dot` is stripped for backward compatibility (every example
 before bulletin-deploy 0.15.0 spelled it out), but this tool does not append
 one — guessing the right suffix per environment would mean copying

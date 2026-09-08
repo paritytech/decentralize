@@ -33,5 +33,11 @@ export default defineConfig({
         // masking a genuinely hung run.
         testTimeout: 300_000,
         hookTimeout: 60_000,
+        // Prints which bulletin-deploy is installed, its channel (pinned vs
+        // the nightly's latest-on-top install — see .github/workflows/e2e.yml),
+        // and what package.json pins. A red e2e run has three possible causes
+        // — upstream regression, chain drift, or our own staleness — and this
+        // banner is the first thing that separates them.
+        globalSetup: ["./e2e/bulletin-version.ts"],
     },
 });
