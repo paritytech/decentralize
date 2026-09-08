@@ -168,6 +168,34 @@ whatever is on your `PATH` — an unpinned version can silently retarget a deplo
 (above). Set `BULLETIN_DEPLOY_BIN` to point at a local checkout when developing
 against an unreleased version.
 
+## Telemetry
+
+`decentralize` itself collects nothing. It hands `bulletin-deploy` off as a
+child process (see "What it actually does" above), and `bulletin-deploy` ships
+its own Sentry telemetry — that telemetry, not this tool, is what may report a
+deploy. It is **off by default** for anyone outside Parity, and self-enables
+only in internal Parity contexts (an internal-org GitHub repo, a Parity
+self-hosted CI runner, or an internal-org git remote for local dev).
+
+What this tool adds is *attribution*, not collection: it sets
+`BULLETIN_DEPLOY_HOST_APP=decentralize` and `BULLETIN_DEPLOY_HOST_APP_VERSION`
+(this package's own version) on the child's environment, so that if
+bulletin-deploy's telemetry is already reporting, its dashboard can tell a
+decentralize-driven deploy apart from a bare bulletin-deploy run
+(`deploy.host_app` / `deploy.host_app_version`). This does not change *whether*
+telemetry runs — `decentralize` is not on bulletin-deploy's allowlist of host
+apps that count as an internal context on their own.
+
+To opt out regardless of context, set `BULLETIN_DEPLOY_TELEMETRY=0` (or honour
+the ambient [Do Not Track](https://www.eff.org/issues/do-not-track) convention
+via `DO_NOT_TRACK=1`). For the full precedence table and exactly what it
+collects, see `bulletin-deploy`'s own `docs/telemetry.md` — its GitHub repo is
+private, so that file isn't publicly linkable here; if you don't have access,
+the summary above is complete as far as opting in/out goes. (Its public twin,
+[`polkadot-app-deploy`](https://github.com/paritytech/polkadot-app-deploy), is
+a different tool with its own, differently-named telemetry variables — its
+`docs/telemetry.md` does not describe `bulletin-deploy`'s behaviour.)
+
 ## Development
 
 ```sh
