@@ -74,6 +74,18 @@ jobs:
     # default to 'latest' — the whole point of this job.
     env:
       BULLETIN_DEPLOY_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'latest' }}
+      # bulletin-deploy reads DEPLOY_TAG (or --tag) and reports it as the
+      # `deploy.tag` Sentry attribute/tag, whose documented purpose is exactly
+      # this: separating test/benchmark traffic from real user deploys. This
+      # job makes a REAL on-chain deploy (a DotNS write + IPFS pin) every
+      # night, and without a tag it is indistinguishable in Sentry from a
+      # production deploy made by decentralize's actual users. The channel
+      # suffix (mirroring BULLETIN_DEPLOY_CHANNEL above, computed the same way
+      # rather than read back via the env context — env keys can't reliably
+      # reference each other within the same block) means a dashboard can
+      # also split latest-vs-pinned failure rates within this job's own
+      # traffic, not just separate it from everyone else's.
+      DEPLOY_TAG: ${{ format('decentralize-e2e-{0}', github.event_name == 'workflow_dispatch' && inputs.channel || 'latest') }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
