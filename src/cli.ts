@@ -69,6 +69,81 @@ function findDependencyManifest(name: string): string | null {
 }
 
 /**
+ * Locate OUR OWN package.json by walking up from this module's directory.
+ *
+ * At runtime the entry point is `dist/cli.js`, so the package root is one
+ * level up — but hardcoding that "../package.json" guess breaks under the
+ * unit test harness, which compiles the CLI into a throwaway directory nested
+ * several levels under `node_modules/` (see cli.test.ts's own module doc for
+ * why). Walking up mirrors `findDependencyManifest` above and resolves
+ * correctly in both cases: the first candidate checked is exactly the naive
+ * "../package.json" guess, and it only keeps climbing if that guess misses.
+ */
+function findOwnManifest(): string | null {
+    let dir = dirname(fileURLToPath(import.meta.url));
+    for (;;) {
+        const candidate = join(dir, "package.json");
+        if (existsSync(candidate)) return candidate;
+        const parent = dirname(dir);
+        if (parent === dir) return null;
+        dir = parent;
+    }
+}
+
+/**
+ * Our own version, for Sentry host-app attribution — or undefined if it
+ * cannot be determined for any reason. Never throws: a telemetry attribute
+ * must never be the reason a deploy fails, and a missing attribute is honest
+ * where a fabricated one (e.g. "unknown") would poison the dashboard.
+ */
+function ownVersion(): string | undefined {
+    try {
+        const manifestPath = findOwnManifest();
+        if (manifestPath === null) return undefined;
+        const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { version?: string };
+        return typeof manifest.version === "string" && manifest.version !== "" ? manifest.version : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Env for the bulletin-deploy child process.
+ *
+ * BULLETIN_DEPLOY_HOST_APP / BULLETIN_DEPLOY_HOST_APP_VERSION are how
+ * bulletin-deploy's own Sentry telemetry (src/telemetry.ts in that repo)
+ * attributes a deploy to decentralize instead of reporting it as a bare
+ * bulletin-deploy run — it emits them as the `deploy.host_app` /
+ * `deploy.host_app_version` span attributes, and `deploy.host_app` as a
+ * Sentry tag (dropped when unset, so dashboards can use `has:deploy.host_app`
+ * as a discriminator).
+ *
+ * This changes only HOW an already-reporting deploy is labelled, never
+ * WHETHER it reports at all: bulletin-deploy's `PARITY_HOST_APPS` allowlist
+ * (which flips telemetry's internal-context detection on for a recognised
+ * host app) contains only "playground-cli" — "decentralize" is not in it —
+ * so setting this cannot turn telemetry on for an external user who wouldn't
+ * otherwise have it on. The existing opt-out precedence
+ * (BULLETIN_DEPLOY_TELEMETRY=0/off, DO_NOT_TRACK) is untouched and still wins.
+ *
+ * Each var independently respects an explicit caller override: someone
+ * embedding decentralize in a larger tool has a legitimate reason to name
+ * themselves (or their own version) instead, so if either is already set in
+ * the environment we inherit, that value is left alone.
+ */
+function deployEnv(): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    if (env.BULLETIN_DEPLOY_HOST_APP === undefined) {
+        env.BULLETIN_DEPLOY_HOST_APP = "decentralize";
+    }
+    if (env.BULLETIN_DEPLOY_HOST_APP_VERSION === undefined) {
+        const version = ownVersion();
+        if (version !== undefined) env.BULLETIN_DEPLOY_HOST_APP_VERSION = version;
+    }
+    return env;
+}
+
+/**
  * Resolve bulletin-deploy, preferring OUR PINNED DEPENDENCY.
  *
  * Pinning matters: bulletin-deploy 0.13.x silently rewrites non-compliant DotNS
@@ -232,7 +307,10 @@ function main(): void {
 
         // stdio: "inherit" is the whole point: bulletin-deploy's verbose output
         // reaches the terminal unfiltered, and its exit code becomes ours.
-        const result = spawnSync(deploy.command, deployArgs, { stdio: "inherit" });
+        // env: deployEnv() adds host-app attribution on top of our own inherited
+        // environment (see deployEnv's doc) — it does not otherwise change what
+        // the child sees.
+        const result = spawnSync(deploy.command, deployArgs, { stdio: "inherit", env: deployEnv() });
         if (result.error !== undefined) throw result.error;
         if (result.status !== 0) {
             process.stderr.write(`\n✖ bulletin-deploy exited ${result.status ?? "on a signal"}\n`);

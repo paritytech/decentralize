@@ -69,6 +69,9 @@ interface StubRecord {
     argv: string[];
     /** Contents of the upload root at the moment the child ran. */
     uploadRootFiles: string[];
+    /** What the child observed for the Sentry host-app attribution vars, or null if unset. */
+    hostApp: string | null;
+    hostAppVersion: string | null;
 }
 
 function temp(prefix: string): string {
@@ -120,6 +123,8 @@ beforeAll(() => {
             // Read the upload root from inside the child: proves the archive is
             // still staged while the deploy runs, not cleaned up underneath it.
             "    uploadRootFiles: readdirSync(argv[0]).sort(),",
+            "    hostApp: process.env.BULLETIN_DEPLOY_HOST_APP ?? null,",
+            "    hostAppVersion: process.env.BULLETIN_DEPLOY_HOST_APP_VERSION ?? null,",
             "}), 'utf8');",
             "process.stdout.write('stub bulletin-deploy ran\\n');",
             "process.exit(Number(process.env.STUB_EXIT ?? '0'));",
@@ -159,7 +164,13 @@ interface Run {
  */
 function run(
     args: string[],
-    opts: { exitCode?: number; path?: string; deployBin?: string | null } = {},
+    opts: {
+        exitCode?: number;
+        path?: string;
+        deployBin?: string | null;
+        /** Extra vars layered onto the child's env, e.g. to simulate a caller-set override. */
+        env?: Record<string, string>;
+    } = {},
 ): Run {
     const recordPath = join(temp("decentralize-cli-rec-"), "record.json");
     const env: Record<string, string> = {
@@ -167,6 +178,7 @@ function run(
         PATH: opts.path ?? `${stubBinDir}:${process.env.PATH ?? ""}`,
         STUB_RECORD: recordPath,
         STUB_EXIT: String(opts.exitCode ?? 0),
+        ...opts.env,
     };
     const bin = opts.deployBin === undefined ? stubDeployPath : opts.deployBin;
     if (bin === null) delete env.BULLETIN_DEPLOY_BIN;
@@ -264,6 +276,40 @@ describe("the handoff to bulletin-deploy", () => {
         created.push(kept!);
         // The upload root lives inside the staging directory it reports.
         expect(out.record!.argv[0]!.startsWith(kept!)).toBe(true);
+    });
+
+    it("identifies itself to the child as the host app, with its own version", () => {
+        // BULLETIN_DEPLOY_HOST_APP / _VERSION are how bulletin-deploy's Sentry
+        // telemetry attributes a deploy to decentralize instead of reporting
+        // as bare bulletin-deploy (see triangle-deploy's src/telemetry.ts).
+        const out = run([app(), "--dot", "myapp"]);
+
+        const pkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")) as {
+            version: string;
+        };
+        expect(out.record!.hostApp).toBe("decentralize");
+        expect(out.record!.hostAppVersion).toBe(pkg.version);
+    });
+
+    it("does not clobber a caller-set BULLETIN_DEPLOY_HOST_APP", () => {
+        // Someone embedding decentralize in a larger tool has a legitimate
+        // reason to name themselves instead — their value wins.
+        const out = run([app(), "--dot", "myapp"], {
+            env: { BULLETIN_DEPLOY_HOST_APP: "some-embedder" },
+        });
+
+        expect(out.record!.hostApp).toBe("some-embedder");
+    });
+
+    it("does not clobber a caller-set BULLETIN_DEPLOY_HOST_APP_VERSION, independently of the host app name", () => {
+        const out = run([app(), "--dot", "myapp"], {
+            env: { BULLETIN_DEPLOY_HOST_APP_VERSION: "9.9.9" },
+        });
+
+        // The two vars are respected independently: only the version was
+        // overridden, so the host app name still defaults to decentralize.
+        expect(out.record!.hostApp).toBe("decentralize");
+        expect(out.record!.hostAppVersion).toBe("9.9.9");
     });
 
     it("spawns nothing at all on --dry-run", () => {
