@@ -189,12 +189,17 @@ apps that count as an internal context on their own.
 To opt out regardless of context, set `BULLETIN_DEPLOY_TELEMETRY=0` (or honour
 the ambient [Do Not Track](https://www.eff.org/issues/do-not-track) convention
 via `DO_NOT_TRACK=1`). For the full precedence table and exactly what it
-collects, see `bulletin-deploy`'s own `docs/telemetry.md` — its GitHub repo is
-private, so that file isn't publicly linkable here; if you don't have access,
-the summary above is complete as far as opting in/out goes. (Its public twin,
-[`polkadot-app-deploy`](https://github.com/paritytech/polkadot-app-deploy), is
-a different tool with its own, differently-named telemetry variables — its
-`docs/telemetry.md` does not describe `bulletin-deploy`'s behaviour.)
+collects, read `bulletin-deploy`'s own telemetry doc — it ships inside the
+published package, so it is already on your disk after `npm install`:
+
+```sh
+cat node_modules/bulletin-deploy/docs/telemetry.md
+```
+
+(Its GitHub repo is private, hence the local path rather than a link. Its
+public twin, [`polkadot-app-deploy`](https://github.com/paritytech/polkadot-app-deploy),
+is a different tool with its own, differently-named telemetry variables — that
+one's doc does not describe `bulletin-deploy`'s behaviour.)
 
 ## Development
 
