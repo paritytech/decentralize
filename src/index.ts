@@ -278,55 +278,21 @@ export function normaliseDomain(input: string): string {
     if (label === "") {
         throw new UsageError(`invalid --dot value: "${input}"`);
     }
-    assertLabelIsPopRulesSafe(label);
+    // Through bulletin-deploy 0.17.x this used to also reject a label with 1
+    // or 3+ trailing digits here (`assertLabelIsPopRulesSafe`), because
+    // DotNS (PopRules) enforced exactly 0 or 2 and pre-0.14 bulletin-deploy
+    // would silently rewrite a non-compliant label onto a DIFFERENT,
+    // possibly already-owned name instead of failing (its issue #1189) — see
+    // the README's "Pinned dependency" section for that history. DotNS
+    // v0.6.0 (upstream bulletin-deploy#1414, live in the 0.18.0 pin) drops
+    // the trailing-digit rule entirely, so the check is gone rather than
+    // updated. It was already the wrong layer for this: pre-empting a
+    // chain-side naming rule locally is exactly what let it rot the moment
+    // upstream changed the rule. Current bulletin-deploy detects the live
+    // ABI profile at connect time and, if a target chain still enforces an
+    // older rule, errors with concrete alternative names — strictly better
+    // than a stale local copy of that rule.
     return label;
-}
-
-export function countTrailingDigits(label: string): number {
-    return /\d*$/.exec(label)?.[0].length ?? 0;
-}
-
-/**
- * Reject a label that DotNS would rewrite rather than register.
- *
- * PopRules accepts exactly 0 or 2 trailing digits; anything else reverts
- * on-chain. bulletin-deploy's `sanitizeDomainLabel` therefore rewrites such
- * labels — and up to and including 0.13.x it did so on the registration path,
- * which SILENTLY RETARGETS the deploy at a different name (its issue #1189).
- * Observed live: `--dot spa-route-test3` became `spa-route-test`, an
- * already-owned live name (registered under `.dot`, the only TLD that
- * existed at the time), and the deploy went on to offer to overwrite its
- * content. The rewrite-onto-a-different-name hazard is independent of which
- * TLD is in play today.
- *
- * Newer bulletin-deploy refuses non-compliant labels outright, so erroring here
- * matches where upstream landed while also protecting anyone on an older
- * binary. No override flag, on purpose: the fix is to pick a compliant name.
- */
-export function assertLabelIsPopRulesSafe(label: string): void {
-    const trailing = countTrailingDigits(label);
-    if (trailing === 0 || trailing === 2) return;
-
-    let stripped = label;
-    for (;;) {
-        const next = stripped.replace(/\d+$/, "").replace(/-+$/, "");
-        if (next === stripped) break;
-        stripped = next;
-    }
-    let becomes = stripped;
-    if (trailing > 2) {
-        const candidate = stripped + label.slice(-2);
-        if (countTrailingDigits(candidate) === 2) becomes = candidate;
-    }
-
-    throw new UsageError(
-        `--dot "${label}" has ${trailing} trailing digit${trailing === 1 ? "" : "s"}; DotNS ` +
-            `(PopRules) accepts exactly 0 or 2. bulletin-deploy would rewrite it to ` +
-            `"${becomes}" instead of failing — on 0.13.x that silently retargets the ` +
-            `deploy at a DIFFERENT name, overwriting it if you own it (its issue #1189). ` +
-            `Use a label ending in a letter, or in exactly two digits (e.g. "${stripped}" ` +
-            `or "${stripped}01").`,
-    );
 }
 
 /** Root-level `*.html` filenames, sorted for determinism. */
