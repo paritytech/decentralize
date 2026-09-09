@@ -218,6 +218,10 @@ npm test
 npm run build
 ```
 
+Cutting a release (this package isn't on npm yet) is covered in
+[`docs-internal/RELEASING.md`](docs-internal/RELEASING.md) — not duplicated
+here since it's an internal process doc, not something a consumer needs.
+
 ## Licence
 
 GPL-3.0-or-later, matching [`bulletin-deploy`](https://www.npmjs.com/package/bulletin-deploy)
