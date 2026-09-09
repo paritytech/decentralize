@@ -130,26 +130,35 @@ So fallback files are **off by default**. Pass `--fallback` to opt in if you
 actually serve from a plain Kubo gateway. `--no-fallback` is still accepted (as
 a no-op) so existing scripts and CI invocations keep working unchanged.
 
-## Naming: exactly 0 or 2 trailing digits
+## Naming: this tool no longer restricts trailing digits
 
-DotNS (PopRules) accepts a label with **exactly zero or two trailing digits**;
-anything else reverts on-chain. bulletin-deploy responds by *rewriting* such
-labels — and on 0.13.x it did so on the registration path, silently retargeting
-the deploy at a different name ([its issue #1189](https://www.npmjs.com/package/bulletin-deploy)).
-Observed live: `--dot my-app3` became `my-app.dot` (`.dot` was the only TLD
-that existed at the time), an already-owned live name, and the deploy went on
-to offer to overwrite its content. The hazard — silently landing on a
-different, already-owned name — is the same regardless of which TLD the
-target environment uses today.
+Through bulletin-deploy 0.17.x, DotNS (PopRules) accepted a label with
+**exactly zero or two trailing digits**; anything else reverted on-chain, and
+this tool refused such labels up front rather than let you hit that revert.
+DotNS v0.6.0 (upstream [bulletin-deploy#1414](https://www.npmjs.com/package/bulletin-deploy),
+live in the `0.18.0` pin this tool now uses) drops the trailing-digit rule
+entirely — a label like `my-app3` or `dotworld001` is a perfectly normal
+DotNS name today, so `decentralize` no longer pre-empts it. (This traces to
+upstream's own source-verified commit against the live `PopRules` /
+`StringUtils` contracts, not to an independent probe of the deployed chains
+from here.)
 
-This tool refuses such labels up front and tells you what they would have become:
+If you deploy against a chain that is still on an older DotNS ABI profile
+and hands it a name that profile does reject, bulletin-deploy itself detects
+that live at connect time and refuses the name with concrete alternatives —
+you don't need this tool to guess at the rule in advance.
 
-```
-✖ --dot "my-app3" has 1 trailing digit; DotNS (PopRules) accepts exactly 0 or 2.
-  bulletin-deploy would rewrite it to "my-app" instead of failing …
-```
-
-Use a label ending in a letter, or in exactly two digits (`my-app01`).
+**History, for context:** the reason this tool used to guard against a
+non-compliant label at all wasn't the on-chain revert itself — that fails
+loudly — it was that bulletin-deploy up to and including 0.13.x responded to
+a non-compliant label by *rewriting* it, and did so on the registration path,
+which SILENTLY RETARGETED the deploy at a different, possibly already-owned
+name ([its issue #1189](https://www.npmjs.com/package/bulletin-deploy)).
+Observed live at the time: `--dot my-app3` became `my-app.dot` (`.dot` was
+the only TLD that existed then), an already-owned live name, and the deploy
+went on to offer to overwrite its content. Current bulletin-deploy errors
+instead of rewriting, which is what made the local guard here safe to retire
+rather than merely update.
 
 ## Kubo is required on purpose
 
