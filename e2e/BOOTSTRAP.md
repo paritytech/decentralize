@@ -65,6 +65,15 @@ in the pinned bulletin-deploy:
 `decentralize-ci` has a 15-character base and ends in a letter, so it lands in
 the last row: open to any account, not gated on the signer's PoP status.
 
+> **Note, 2026-09-09 (see item 5's update of the same date for the full
+> story):** the "1 or 3+ trailing digits ... Reserved" row above no longer
+> reflects the DotNS profile live under the `bulletin-deploy@0.18.0` pin —
+> that rule was dropped in DotNS v0.6.0. Left as-written since it does not
+> change `decentralize-ci`'s own classification (0 trailing digits, base
+> length 15 — the last row either way), and rewriting a table that's still
+> correct for the row that matters here risked losing the historical shape
+> of the rule for anyone auditing this document later.
+
 **How to check it:** there is no supported non-deploying way to read this
 label's current on-chain contenthash or owner — see "known unknown" below.
 `e2e/bootstrap.sh` reports this row as `UNKNOWN, cannot check without
@@ -289,7 +298,7 @@ If nightly runs start failing on a price/balance error where they previously
 didn't, check this first, before assuming a `decentralize` or
 `bulletin-deploy` regression.
 
-## 5. Pinned `bulletin-deploy@0.17.0`
+## 5. Pinned `bulletin-deploy@0.18.0`
 
 > **Update, 2026-08-18:** bumped from `0.14.2` to `0.15.0`
 > (`deps/bulletin-deploy-0.15.0`). The section below still says `0.14.2` in
@@ -344,6 +353,29 @@ didn't, check this first, before assuming a `decentralize` or
 >   pin (e.g. `▸ bulletin-deploy@0.17.0 (channel: latest; package.json pins
 >   0.17.0)`), so a reader never has to dig through an `npm install` log to
 >   know which bulletin-deploy a given run actually exercised.
+
+> **Update, 2026-09-09:** bumped from `0.17.0` to `0.18.0`
+> (`deps/bulletin-deploy-0.18.0`). Motivation: bulletin-deploy 0.18.0 ships
+> DotNS v0.6.0 (upstream bulletin-deploy#1414, released 2026-09-07, live on
+> previewnet and paseo-next-v2 — the environments this tool targets — within
+> 24h of that release per the commit message), which **drops the
+> trailing-digit rule entirely**: base length is now the label as written,
+> and `PopRules._classifyValidatedName` no longer strips digits or treats 1
+> or 3+ trailing digits as Reserved. `decentralize` had its own local copy of
+> that now-dead rule (`assertLabelIsPopRulesSafe` in `src/index.ts`, refusing
+> such labels before ever calling bulletin-deploy) — removed in this bump
+> rather than updated, since pre-empting a chain-side rule locally is what
+> let it rot the moment upstream changed it; see the main README's "Naming"
+> section for the rewritten explanation and its history. **This also makes
+> the `classifyLabelStatus` table in item 1 above stale for this pin**: its
+> "1 or 3+ trailing digits, or base length <= 5 → Reserved" row no longer
+> reflects the pinned bulletin-deploy's DotNS profile. `decentralize-ci`
+> itself is unaffected either way — 0 trailing digits and a 15-character base
+> classified it as NoStatus before this bump and still does after — so this
+> is flagged for accuracy, not because the checklist item below actually
+> flipped. The rest of item 5's re-verification checklist was worked through
+> again for this bump: `fetchManifestRoundtrip`/`parseManifest` still resolve
+> at the same paths, and the `startingPriceWei` price rule is unchanged.
 
 **What it is:** `decentralize`'s own pinned dependency (`package.json` →
 `dependencies.bulletin-deploy`), and the two public exports the e2e suite

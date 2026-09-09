@@ -248,32 +248,36 @@ describe("resolveSpaRoot", () => {
     });
 });
 
-describe("assertLabelIsPopRulesSafe (via normaliseDomain)", () => {
-    it("accepts a label ending in a letter", () => {
+describe("normaliseDomain: trailing-digit shapes (DotNS v0.6.0 dropped the rule)", () => {
+    // Through bulletin-deploy 0.17.x, DotNS (PopRules) accepted only 0 or 2
+    // trailing digits, and this tool refused everything else up front (see
+    // the removed `assertLabelIsPopRulesSafe`). DotNS v0.6.0 (upstream
+    // bulletin-deploy#1414, shipped in the 0.18.0 pin) drops that rule
+    // entirely — base length is now the label as written, and 1 or 3+
+    // trailing digits is no longer Reserved. These cases lock in that a
+    // label of every trailing-digit shape now passes through unchanged;
+    // see `normaliseDomain`'s doc comment for why this tool no longer
+    // pre-empts a chain-side naming rule at all.
+    it("passes through 1 trailing digit unchanged (was refused pre-0.18.0)", () => {
+        // myapp-pr7 is the exact name upstream's #1414 commit cites as
+        // blocked before v0.6.0 and NoStatus (registrable) after.
+        expect(normaliseDomain("myapp-pr7")).toBe("myapp-pr7");
+        expect(normaliseDomain("my-app3")).toBe("my-app3");
+    });
+
+    it("passes through 3+ trailing digits unchanged (was refused pre-0.18.0)", () => {
+        expect(normaliseDomain("dotworld001")).toBe("dotworld001");
+        expect(normaliseDomain("my-app123")).toBe("my-app123");
+    });
+
+    it("still accepts the previously-only-valid 0- and 2-digit shapes", () => {
+        // Confirms the relaxation is specifically about trailing-digit
+        // count, not "normaliseDomain stopped validating anything" —
+        // dotworld01 and peopl-pr62 are upstream's own examples, both
+        // already-valid 2-digit shapes under the old rule too.
+        expect(normaliseDomain("dotworld01")).toBe("dotworld01");
+        expect(normaliseDomain("peopl-pr62")).toBe("peopl-pr62");
         expect(normaliseDomain("my-app")).toBe("my-app");
-    });
-
-    it("accepts exactly two trailing digits", () => {
-        expect(normaliseDomain("my-app01")).toBe("my-app01");
-    });
-
-    it("rejects one trailing digit, naming what it would silently become", () => {
-        // The live near-miss: spa-route-test3 → spa-route-test (#1189). No
-        // TLD is asserted here: which suffix bulletin-deploy would have
-        // rewritten onto is environment-dependent since 0.15.0, but the
-        // silent-retarget hazard is the same regardless.
-        expect(() => normaliseDomain("spa-route-test3")).toThrow(/"spa-route-test"/);
-        expect(() => normaliseDomain("spa-route-test3")).toThrow(/1 trailing digit;/);
-    });
-
-    it("rejects three or more trailing digits", () => {
-        expect(() => normaliseDomain("my-app123")).toThrow(/3 trailing digits/);
-        // >2 keeps the last two, mirroring sanitizeDomainLabel.
-        expect(() => normaliseDomain("my-app123")).toThrow(/"my-app23"/);
-    });
-
-    it("strips a dangling hyphen when suggesting alternatives", () => {
-        expect(() => normaliseDomain("my-app-1")).toThrow(/"my-app"/);
     });
 });
 
