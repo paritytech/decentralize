@@ -278,20 +278,16 @@ export function normaliseDomain(input: string): string {
     if (label === "") {
         throw new UsageError(`invalid --dot value: "${input}"`);
     }
-    // Through bulletin-deploy 0.17.x this used to also reject a label with 1
-    // or 3+ trailing digits here (`assertLabelIsPopRulesSafe`), because
-    // DotNS (PopRules) enforced exactly 0 or 2 and pre-0.14 bulletin-deploy
-    // would silently rewrite a non-compliant label onto a DIFFERENT,
-    // possibly already-owned name instead of failing (its issue #1189) — see
-    // the README's "Pinned dependency" section for that history. DotNS
-    // v0.6.0 (upstream bulletin-deploy#1414, live in the 0.18.0 pin) drops
-    // the trailing-digit rule entirely, so the check is gone rather than
-    // updated. It was already the wrong layer for this: pre-empting a
-    // chain-side naming rule locally is exactly what let it rot the moment
-    // upstream changed the rule. Current bulletin-deploy detects the live
-    // ABI profile at connect time and, if a target chain still enforces an
-    // older rule, errors with concrete alternative names — strictly better
-    // than a stale local copy of that rule.
+    // Through bulletin-deploy 0.17.x this also rejected a label with 1 or
+    // 3+ trailing digits here (`assertLabelIsPopRulesSafe`) — see the
+    // README's "Naming" section for that history. DotNS v0.6.0 (upstream
+    // bulletin-deploy#1414, live in the 0.18.0 pin) drops the rule
+    // entirely, so the check is gone rather than updated: pre-empting a
+    // chain-side naming rule locally is what let it rot the moment upstream
+    // changed it. Current bulletin-deploy detects the live ABI profile at
+    // connect time and, if a target chain still enforces an older rule,
+    // errors with concrete alternatives — strictly better than a stale
+    // local copy of that rule.
     return label;
 }
 
