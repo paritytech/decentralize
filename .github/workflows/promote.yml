@@ -1,0 +1,132 @@
+name: Promote RC to latest
+
+# Manually-triggered workflow that promotes a published
+# `@paritytech/decentralize@<rc>` version to the `latest` dist-tag on npm.
+# Use after the rc has been smoke-tested by hand (see docs-internal/RELEASING.md
+# — this repo's e2e suite runs from `main` against source, not the published
+# tarball, so it is not itself proof the artifact is good).
+#
+# `npm dist-tag add` repoints `latest` to the already-published artifact
+# bytes — no second `npm publish`, so what users install after promotion is
+# guaranteed identical to what was smoke-tested, not a fresh rebuild of it.
+#
+# The maintainer triggers this from the Actions UI:
+#   Actions -> "Promote RC to latest" -> Run workflow -> version: 0.1.0-rc.1
+#
+# Pre-flight checks performed by the workflow:
+#   * version is non-empty and is a real prerelease (matches semver x.y.z-...)
+#   * NPM_TOKEN secret is actually configured (see the job comment below)
+#   * `npm view @paritytech/decentralize@<version>` resolves — i.e. the
+#     version is really on the registry (refuses to promote a phantom that
+#     would leave @latest dangling)
+#
+# Compatible with publish.yml: that workflow already publishes prereleases
+# under --tag rc so they don't steal @latest accidentally. This workflow is
+# what completes the cycle.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to promote to @latest (e.g. 0.1.0-rc.1). Must already exist on npm.'
+        type: string
+        required: true
+
+permissions:
+  # `npm dist-tag add` authenticates with a long-lived token (see NPM_TOKEN
+  # below), not OIDC — trusted publishing only covers `npm publish`, and this
+  # workflow never runs that. id-token: write would be dead privilege here,
+  # so unlike publish.yml this job stays at the least-privilege default
+  # (matching the "never raise these without a matching review" posture in
+  # tests.yml and e2e.yml).
+  contents: read
+
+jobs:
+  promote:
+    name: Promote ${{ inputs.version }} to @latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate version input
+        env:
+          V: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "$V" ]; then
+            echo "::error::version input is required"
+            exit 1
+          fi
+          # Refuse anything that doesn't look like a prerelease — this
+          # workflow is specifically for the RC promotion flow. Stable
+          # releases publish to @latest directly via publish.yml.
+          if [[ ! "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+$ ]]; then
+            echo "::error::Version '$V' must be a semver prerelease like 0.1.0-rc.1"
+            exit 1
+          fi
+
+      # This repo has NO secrets configured today (verified via `gh secret
+      # list`; e2e.yml even documents "No secrets, ever" for its own job).
+      # `npm dist-tag add` cannot use OIDC — only `npm publish` can — so this
+      # workflow genuinely needs a long-lived NPM_TOKEN. Fail loudly and
+      # early rather than let the promote step fall through to a confusing
+      # auth error later (an expired/wrong-scope token surfaces as an opaque
+      # 4xx that reads nothing like "add the secret").
+      - name: Verify NPM_TOKEN secret is configured
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "::error::NPM_TOKEN secret is not set. Add one at: repo Settings -> Secrets and variables -> Actions -> New repository secret -> NPM_TOKEN. It must be an npm Automation token with publish rights on @paritytech/decentralize — a non-Automation token demands 2FA (EOTP) that CI cannot answer (see bulletin-deploy#1277)."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify version exists on npm
+        env:
+          V: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          # npm view exits non-zero (and prints nothing on stdout) both when
+          # the version is missing AND when the package doesn't exist on npm
+          # at all yet — either way ON_NPM stays empty and this refuses to
+          # promote a phantom that would leave @latest dangling.
+          ON_NPM=$(npm view "@paritytech/decentralize@$V" version 2>/dev/null || true)
+          if [ "$ON_NPM" != "$V" ]; then
+            echo "::error::@paritytech/decentralize@$V is not on npm (got: '$ON_NPM'). Cut the prerelease first via the GitHub Release UI; publish.yml will handle the npm publish."
+            exit 1
+          fi
+          echo "::notice::Confirmed @paritytech/decentralize@$V is on npm"
+
+      - name: Show current dist-tags
+        run: npm dist-tag ls @paritytech/decentralize
+
+      - name: Promote ${{ inputs.version }} to @latest
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          V: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          npm dist-tag add "@paritytech/decentralize@$V" latest
+          echo "::notice::@paritytech/decentralize@latest is now $V"
+
+      - name: Verify @latest now points at ${{ inputs.version }}
+        env:
+          V: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          LATEST=$(npm view @paritytech/decentralize@latest version)
+          echo "Resolved @paritytech/decentralize@latest -> $LATEST"
+          if [ "$LATEST" != "$V" ]; then
+            echo "::error::Promotion did not stick: @latest is $LATEST, expected $V"
+            exit 1
+          fi
+          {
+            echo "## Promoted @paritytech/decentralize@$V to @latest"
+            echo ""
+            npm dist-tag ls @paritytech/decentralize
+          } >> "$GITHUB_STEP_SUMMARY"

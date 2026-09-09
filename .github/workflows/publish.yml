@@ -1,0 +1,97 @@
+name: Publish to npm
+
+# Cutting a GitHub release IS the publish action — there is no separate
+# "release" step. Draft/edit a release in the GitHub UI (or `gh release
+# create`) with a tag matching package.json's version, publish it, and this
+# workflow runs.
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: read
+  # Trusted publishing (OIDC): npm mints a short-lived credential from this
+  # job's id-token against the trusted publisher configured for
+  # @paritytech/decentralize on npmjs.com — no NODE_AUTH_TOKEN anywhere in
+  # this workflow. bulletin-deploy (this package's own dependency) abandoned
+  # a long-lived NPM_TOKEN for exactly this reason: an expired token surfaces
+  # as `E404 PUT`, which reads as "wrong package name" rather than "token
+  # expired", and a non-Automation token surfaces as `EOTP`, demanding 2FA
+  # that CI has no way to answer (bulletin-deploy#1277). Don't reintroduce a
+  # token here to "simplify" this — it recreates the exact trap.
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Guard against a tag/version mismatch BEFORE any install work. Upstream
+      # (bulletin-deploy) reads only package.json and never looks at the
+      # release tag, so cutting a release tagged e.g. v0.2.0 while
+      # package.json still says 0.1.0 would silently publish 0.1.0 under a
+      # release that claims otherwise — the tag becomes a lie nobody catches.
+      # This is a deliberate addition beyond bulletin-deploy's own shape.
+      #
+      # The tag is attacker-influenceable (anyone who can cut a release
+      # controls it), so it's passed through `env:` and compared in the
+      # shell rather than interpolated into the run body — same pattern
+      # promote.yml (and upstream) use for workflow_dispatch inputs.
+      - name: Verify release tag matches package.json version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${TAG#v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Release tag '$TAG' (version '$TAG_VERSION') does not match package.json version '$PKG_VERSION'. Bump package.json to match the tag (or re-cut the release with the right tag) before publishing."
+            exit 1
+          fi
+          echo "::notice::Release tag $TAG matches package.json version $PKG_VERSION"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+
+      # Node 22 bundles npm 10, which ignores the id-token entirely and falls
+      # back to looking for a token — trusted publishing needs npm >= 11.5.1.
+      # OIDC also needs Node >= 22.14.0; `node-version: '22'` above resolves
+      # to the latest 22.x, which satisfies that — don't narrow it to an
+      # earlier exact 22.x without checking.
+      - run: npm install -g npm@11.17.0
+
+      # npm ci, not npm install: matches tests.yml and respects the lockfile
+      # exactly rather than letting it drift on a publish run.
+      - run: npm ci
+
+      # This repo's own gates, run explicitly so a failure is fast and
+      # unambiguous. package.json's prepublishOnly already re-runs build +
+      # test at pack time (npm publish invokes it automatically), so these
+      # are a fail-early convenience on top of that guard, not the only one —
+      # if a step here were ever skipped, prepublishOnly still blocks a
+      # broken publish.
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      # Pre-releases (e.g. 0.1.0-rc.1) publish under the `rc` dist-tag so a
+      # plain `npm install @paritytech/decentralize` (which resolves
+      # @latest) never picks one up by accident. Stable versions publish to
+      # @latest. Both need --access public: this package is scoped
+      # (@paritytech/...) and has never been published, so npm would
+      # otherwise default a scoped package's first publish to restricted.
+      - name: Publish to npm
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ "$VERSION" == *-* ]]; then
+            echo "Publishing $VERSION as pre-release under @rc"
+            npm publish --access public --tag rc
+          else
+            echo "Publishing $VERSION as stable under @latest"
+            npm publish --access public
+          fi
